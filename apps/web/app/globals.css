@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 1. Import Fonts */
+@import "@fontsource/inter/latin.css";
+@import "@fontsource/inter-tight/latin.css";
+
+@layer base {
+  :root {
+    /* Fonts */
+    --font-heading: "Inter Tight", sans-serif;
+    --font-body: "Inter", sans-serif;
+
+    /* Backgrounds: Soft Apple Surfaces */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 11%;
+
+    /* Surfaces */
+    --surface: 220 14% 96%;
+    --surface-elevated: 0 0% 100%;
+
+    /* Card */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 11%;
+
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 11%;
+
+    /* Primary: Apple-style Green Accent */
+    --primary: 143 64% 34%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Subtle pill */
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 0 0% 11%;
+
+    /* Muted */
+    --muted: 220 13% 91%;
+    --muted-foreground: 220 9% 46%;
+
+    /* Accent: Interactive/Hover */
+    --accent: 143 64% 96%;
+    --accent-foreground: 143 64% 34%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Border */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 143 64% 34%;
+
+    /* Radius */
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 0 0% 98%;
+    --card: 224 71% 4%;
+    --card-foreground: 0 0% 98%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 143 64% 44%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 217 10% 64%;
+    --accent: 215 28% 17%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 143 64% 44%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.5;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-heading tracking-tight;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  /* Page Header */
+  .page-header {
+    @apply flex flex-col gap-1 mb-6;
+  }
+
+  .page-title {
+    @apply text-2xl font-heading font-semibold tracking-tight text-foreground;
+  }
+
+  .page-description {
+    @apply text-sm text-muted-foreground;
+  }
+
+  /* Empty State */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 px-4 text-center border border-dashed rounded-lg bg-muted/20;
+  }
+
+  .empty-state-icon {
+    @apply w-12 h-12 text-muted-foreground/50 mb-4;
+  }
+
+  .empty-state-title {
+    @apply text-base font-medium text-foreground mb-1;
+  }
+
+  .empty-state-description {
+    @apply text-sm text-muted-foreground max-w-sm;
+  }
+
+  /* Status Badges */
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .status-badge-success {
+    @apply bg-green-50 text-green-700 border border-green-200;
+  }
+
+  .status-badge-warning {
+    @apply bg-amber-50 text-amber-700 border border-amber-200;
+  }
+
+  .status-badge-error {
+    @apply bg-red-50 text-red-700 border border-red-200;
+  }
+
+  .status-badge-info {
+    @apply bg-blue-50 text-blue-700 border border-blue-200;
+  }
+
+  .status-badge-neutral {
+    @apply bg-gray-100 text-gray-700 border border-gray-200;
+  }
+
+  /* Stat Card */
+  .stat-card {
+    @apply bg-card rounded-xl border p-5 transition-shadow hover:shadow-md;
+  }
+
+  .stat-card-label {
+    @apply text-xs font-medium text-muted-foreground uppercase tracking-wide;
+  }
+
+  .stat-card-value {
+    @apply text-2xl font-semibold text-foreground mt-1;
+  }
+
+  /* Filter Bar */
+  .filter-bar {
+    @apply flex flex-col sm:flex-row gap-3 items-start sm:items-center;
+  }
+
+  /* List Item */
+  .list-item {
+    @apply flex items-center justify-between p-4 bg-card border rounded-lg transition-all hover:shadow-sm hover:border-primary/20;
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 640px) {
+    .page-title {
+      @apply text-xl;
+    }
+  }
+}

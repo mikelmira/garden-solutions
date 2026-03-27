@@ -1,0 +1,27 @@
+{
+  "name": "garden-solutions",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down",
+    "start:api": "./scripts/start-api.sh",
+    "start:api:prod": "./scripts/start-api.sh --prod",
+    "check:integrity": "cd apps/api && python -m scripts.check_integrity",
+    "prod:up": "docker-compose -f docker-compose.prod.yml up -d",
+    "prod:down": "docker-compose -f docker-compose.prod.yml down",
+    "prod:logs": "docker-compose -f docker-compose.prod.yml logs -f"
+  },
+  "devDependencies": {
+    "turbo": "latest",
+    "prettier": "^3.2.5"
+  },
+  "packageManager": "pnpm@8.15.5",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

@@ -1,0 +1,52 @@
+
+> web@0.1.0 dev /Users/mikeelmira/Desktop/Garden Solutions/apps/web
+> next dev
+
+   ▲ Next.js 14.1.0
+   - Local:        http://localhost:3000
+
+npm error code ENOWORKSPACES
+npm error This command does not support workspaces.
+npm error A complete log of this run can be found in: /Users/mikeelmira/.npm/_logs/2026-02-02T17_03_43_080Z-debug-0.log
+ ✓ Ready in 1953ms
+ ○ Compiling / ...
+ ✓ Compiled / in 2.6s (744 modules)
+ ✓ Compiled in 179ms (358 modules)
+ ✓ Compiled /admin in 356ms (793 modules)
+ ✓ Compiled /admin/products in 350ms (955 modules)
+ ✓ Compiled /not-found in 128ms (960 modules)
+ ✓ Compiled /_error in 450ms (1122 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, lstat '/Users/mikeelmira/Desktop/Garden Solutions/apps/web/.next/server'
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Resolving '../../../../../../../.next/server/app/not-found' in /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server for build dependencies doesn't lead to expected result '/Users/mikeelmira/Desktop/Garden Solutions/apps/web/.next/server/app/not-found.js', but to 'Error: Can't resolve '../../../../../../../.next/server/app/not-found' in '/Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server'' instead. Resolving dependencies are ignored for this path.
+<w>  at resolve commonjs file ../../../../../../../.next/server/app/not-found (expected /Users/mikeelmira/Desktop/Garden Solutions/apps/web/.next/server/app/not-found.js)
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server/require.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server/require.js
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server/load-components.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server/load-components.js
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/utils.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/utils.js
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/worker.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/worker.js
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/webpack/loaders/next-route-loader/index.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/webpack/loaders/next-route-loader/index.js
+<w>  at resolve commonjs /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/webpack/loaders/next-route-loader/index.js
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Resolving '../../../../../../../.next/server/app/(admin)/admin/products/page' in /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server for build dependencies doesn't lead to expected result '/Users/mikeelmira/Desktop/Garden Solutions/apps/web/.next/server/app/(admin)/admin/products/page.js', but to 'Error: Can't resolve '../../../../../../../.next/server/app/(admin)/admin/products/page' in '/Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server'' instead. Resolving dependencies are ignored for this path.
+<w>  at resolve commonjs file ../../../../../../../.next/server/app/(admin)/admin/products/page (expected /Users/mikeelmira/Desktop/Garden Solutions/apps/web/.next/server/app/(admin)/admin/products/page.js)
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server/require.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server/require.js
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server/load-components.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/server/load-components.js
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/utils.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/utils.js
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/worker.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/worker.js
+<w>  at file dependencies /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/webpack/loaders/next-route-loader/index.js
+<w>  at file /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/webpack/loaders/next-route-loader/index.js
+<w>  at resolve commonjs /Users/mikeelmira/Desktop/Garden Solutions/apps/web/node_modules/.pnpm/next@14.1.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/build/webpack/loaders/next-route-loader/index.js
+ ✓ Compiled /login in 277ms (1132 modules)
+ ✓ Compiled in 464ms (1174 modules)
+ ✓ Compiled /not-found in 93ms (1126 modules)
+ ✓ Compiled / in 220ms (1126 modules)
+ ✓ Compiled /_error in 137ms (1128 modules)
+ ✓ Compiled in 235ms (1179 modules)
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload

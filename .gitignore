@@ -1,0 +1,14 @@
+node_modules
+.DS_Store
+.env
+.env.local
+.next
+dist
+__pycache__
+*.pyc
+.venv
+postgres_data
+.turbo
+.claude
+logs
+verify_fix.sh
