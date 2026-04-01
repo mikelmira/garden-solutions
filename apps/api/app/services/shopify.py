@@ -605,7 +605,14 @@ class ShopifyService:
 
         order_notes = f"Shopify order #{order_data.get('order_number', 'N/A')} — Customer: {customer_name}"
 
+        # Link to the Pot Shack client so it shows correctly in the dashboard
+        pot_shack_client = self.db.query(Client).filter(
+            Client.name.ilike("%pot shack%"),
+            Client.is_active.is_(True),
+        ).first()
+
         order = Order(
+            client_id=pot_shack_client.id if pot_shack_client else None,
             store_id=store_id,
             created_by=system_user_id,
             order_source=OrderSource.SHOPIFY,

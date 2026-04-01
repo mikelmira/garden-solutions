@@ -1,0 +1,28 @@
+gsoperations.co.za {
+    # API routes
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    handle /health {
+        reverse_proxy api:8000
+    }
+
+    handle /uploads/* {
+        reverse_proxy api:8000
+    }
+
+    handle /static/* {
+        reverse_proxy api:8000
+    }
+
+    # Shopify webhook routes
+    handle /api/v1/webhooks/* {
+        reverse_proxy api:8000
+    }
+
+    # Frontend
+    handle {
+        reverse_proxy web:3000
+    }
+}

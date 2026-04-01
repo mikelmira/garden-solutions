@@ -241,13 +241,13 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="stat-card md:col-span-2">
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
                             <div>
                                 <p className="stat-card-label">Total Products Ordered</p>
                                 <p className="stat-card-value">{totalProductsOrdered.toLocaleString()}</p>
                                 <p className="text-xs text-muted-foreground mt-2">Filter by date range</p>
                             </div>
-                            <div className="flex flex-col gap-2 min-w-[160px]">
+                            <div className="flex flex-col gap-2 w-full sm:w-auto sm:min-w-[160px]">
                                 <Input type="date" value={rangeStart} onChange={e => setRangeStart(e.target.value)} />
                                 <Input type="date" value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} />
                             </div>
@@ -315,6 +315,7 @@ export default function AdminDashboard() {
                         <h2 className="text-lg font-heading font-semibold">Product Inventory Summary</h2>
                         <p className="text-sm text-muted-foreground">On hand, ordered, and delivered totals by product.</p>
                     </div>
+                    <div className="overflow-x-auto">
                     <Table>
                         <TableHeader className="bg-muted/30">
                             <TableRow>
@@ -343,6 +344,7 @@ export default function AdminDashboard() {
                             )}
                         </TableBody>
                     </Table>
+                    </div>
                 </Card>
             </div>
         </div>

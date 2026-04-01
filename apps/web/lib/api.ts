@@ -676,6 +676,10 @@ export const apiService = {
                 const res = await api.get("/shopify/internal-skus", { params: { q } });
                 return res.data.data;
             },
+            getCustomers: async (q?: string): Promise<any[]> => {
+                const res = await api.get("/shopify/customers", { params: q ? { q } : {} });
+                return res.data.data;
+            },
         },
     }
 };

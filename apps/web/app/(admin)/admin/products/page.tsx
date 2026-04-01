@@ -230,17 +230,17 @@ export default function ProductsPage() {
                             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         </div>
                     ) : (
-                        <div className="border rounded-md">
+                        <div className="border rounded-md overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-[80px]">Active</TableHead>
-                                        <TableHead className="w-[80px]">Photo</TableHead>
+                                        <TableHead className="w-[60px] sm:w-[80px]">Active</TableHead>
+                                        <TableHead className="w-[60px] sm:w-[80px] hidden sm:table-cell">Photo</TableHead>
                                         <TableHead>Name</TableHead>
-                                        <TableHead>Category</TableHead>
+                                        <TableHead className="hidden md:table-cell">Category</TableHead>
                                         <TableHead className="text-right">Stock</TableHead>
                                         {/* Removed SKUs Column */}
-                                        <TableHead className="text-right">Actions</TableHead>
+                                        <TableHead className="text-right hidden sm:table-cell">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -262,7 +262,7 @@ export default function ProductsPage() {
                                                             className="data-[state=checked]:bg-green-600"
                                                         />
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell className="hidden sm:table-cell">
                                                         {product.image_url ? (
                                                             <img
                                                                 src={product.image_url}
@@ -281,7 +281,7 @@ export default function ProductsPage() {
                                                             {product.name}
                                                         </button>
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell className="hidden md:table-cell">
                                                         <Badge variant="secondary" className="font-normal">
                                                             {product.category || "Uncategorized"}
                                                         </Badge>
@@ -289,7 +289,7 @@ export default function ProductsPage() {
                                                     <TableCell className="text-right font-medium">
                                                         {totalStock.toLocaleString()}
                                                     </TableCell>
-                                                    <TableCell className="text-right">
+                                                    <TableCell className="text-right hidden sm:table-cell">
                                                         <Button variant="outline" size="sm" onClick={() => handleEditClick(product)}>
                                                             Edit
                                                         </Button>

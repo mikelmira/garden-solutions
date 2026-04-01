@@ -6,7 +6,7 @@ import { apiService } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Pencil, Trash2, User, Loader2, Users, MapPin, Store as StoreIcon } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, User, Loader2, Users, MapPin, Store as StoreIcon, ShoppingBag, Phone, Mail } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -28,11 +28,12 @@ export default function AdminClientsPage() {
     const { toast } = useToast();
     const [clients, setClients] = useState<Client[]>([]);
     const [stores, setStores] = useState<Store[]>([]);
+    const [customers, setCustomers] = useState<any[]>([]);
     const [tiers, setTiers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [viewMode, setViewMode] = useState<"all" | "clients" | "stores">("all");
+    const [viewMode, setViewMode] = useState<"all" | "clients" | "stores" | "customers">("all");
 
     // Form State
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,14 +55,16 @@ export default function AdminClientsPage() {
     const loadData = async () => {
         try {
             setLoading(true);
-            const [clientsData, tiersData, storesData] = await Promise.all([
+            const [clientsData, tiersData, storesData, customersData] = await Promise.all([
                 apiService.clients.list(),
                 apiService.priceTiers.list(),
-                apiService.stores.list()
+                apiService.stores.list(),
+                apiService.shopify.getCustomers().catch(() => []),
             ]);
             setClients(clientsData);
             setTiers(tiersData.filter(t => t.is_active));
             setStores(storesData);
+            setCustomers(customersData);
 
             // Set default tier if needed
             if (tiersData.length > 0 && !formData.price_tier_id) {
@@ -78,6 +81,11 @@ export default function AdminClientsPage() {
 
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
     const filteredStores = stores.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.code.toLowerCase().includes(search.toLowerCase()));
+    const filteredCustomers = customers.filter(c =>
+        (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (c.email || "").toLowerCase().includes(search.toLowerCase()) ||
+        (c.phone || "").toLowerCase().includes(search.toLowerCase())
+    );
 
     const handleOpen = (client?: Client) => {
         if (client) {
@@ -194,6 +202,11 @@ export default function AdminClientsPage() {
                             <Plus size={16} /> Add Store
                         </Button>
                     )}
+                    {viewMode === "customers" && (
+                        <span className="text-sm text-muted-foreground self-center">
+                            {customers.length} customer{customers.length !== 1 ? "s" : ""} from Shopify
+                        </span>
+                    )}
                 </div>
             </PageHeader>
 
@@ -225,11 +238,19 @@ export default function AdminClientsPage() {
                         >
                             Stores
                         </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant={viewMode === "customers" ? "default" : "outline"}
+                            onClick={() => setViewMode("customers")}
+                        >
+                            Customers
+                        </Button>
                     </div>
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder={viewMode === "stores" ? "Search stores..." : "Search clients..."}
+                            placeholder={viewMode === "customers" ? "Search customers..." : viewMode === "stores" ? "Search stores..." : "Search clients..."}
                             className="pl-9 max-w-md"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
@@ -333,6 +354,58 @@ export default function AdminClientsPage() {
                                                 </div>
                                                 <div className="text-sm">
                                                     <span className="font-mono text-xs bg-muted px-2 py-1 rounded">{store.code}</span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {viewMode === "customers" && (
+                        <>
+                            {filteredCustomers.length === 0 ? (
+                                <EmptyState
+                                    icon={ShoppingBag}
+                                    title="No customers found"
+                                    description="No Shopify customers match your search."
+                                />
+                            ) : (
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    {filteredCustomers.map((customer, idx) => (
+                                        <Card key={customer.email || idx} className="group hover:shadow-md transition-shadow">
+                                            <CardContent className="p-5">
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <div className="h-10 w-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center text-orange-600 dark:text-orange-400">
+                                                        <ShoppingBag size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-semibold text-foreground">{customer.name || "Unknown"}</h3>
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 mt-1">
+                                                            Shopify Customer
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2 text-sm text-muted-foreground">
+                                                    {customer.email && (
+                                                        <div className="flex items-center gap-2">
+                                                            <Mail size={14} className="flex-shrink-0" />
+                                                            <span className="truncate">{customer.email}</span>
+                                                        </div>
+                                                    )}
+                                                    {customer.phone && (
+                                                        <div className="flex items-center gap-2">
+                                                            <Phone size={14} className="flex-shrink-0" />
+                                                            <span>{customer.phone}</span>
+                                                        </div>
+                                                    )}
+                                                    {customer.address && (
+                                                        <div className="flex items-start gap-2">
+                                                            <MapPin size={14} className="mt-0.5 flex-shrink-0" />
+                                                            <span className="line-clamp-2">{customer.address}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </CardContent>
                                         </Card>

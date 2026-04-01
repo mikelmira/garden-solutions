@@ -401,6 +401,111 @@ def get_recent_webhooks(
 
 
 # ══════════════════════════════════════════════════════════════
+# CUSTOMERS (extracted from Shopify orders)
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/customers")
+def list_shopify_customers(
+    current_user: AdminUser,
+    db: Session = Depends(get_db),
+    q: str = Query("", description="Search by name or email"),
+    limit: int = Query(200, ge=1, le=500),
+):
+    """
+    List unique Shopify customers extracted from order data.
+    Pulls name, email, phone, and address from ShopifyOrder raw_payload.
+    """
+    store = _get_shopify_store(db)
+    orders = (
+        db.query(ShopifyOrder)
+        .filter(
+            ShopifyOrder.store_id == store.id,
+            ShopifyOrder.customer_email.isnot(None),
+        )
+        .all()
+    )
+
+    # Deduplicate by email
+    seen_emails: dict[str, dict] = {}
+    for o in orders:
+        email = (o.customer_email or "").strip().lower()
+        if not email:
+            continue
+
+        if email in seen_emails:
+            # Keep the most recent order's data
+            if o.shopify_created_at and (
+                not seen_emails[email].get("_created_at")
+                or o.shopify_created_at > seen_emails[email]["_created_at"]
+            ):
+                seen_emails[email].update(_extract_customer(o))
+            continue
+
+        customer_data = _extract_customer(o)
+        customer_data["_created_at"] = o.shopify_created_at
+        seen_emails[email] = customer_data
+
+    # Build result list
+    customers = []
+    for email, data in seen_emails.items():
+        data.pop("_created_at", None)
+        customers.append(data)
+
+    # Apply search filter
+    if q:
+        q_lower = q.lower()
+        customers = [
+            c for c in customers
+            if q_lower in (c.get("name") or "").lower()
+            or q_lower in (c.get("email") or "").lower()
+            or q_lower in (c.get("phone") or "").lower()
+        ]
+
+    # Sort by name
+    customers.sort(key=lambda c: (c.get("name") or "").lower())
+
+    return DataResponse(data=customers[:limit])
+
+
+def _extract_customer(order: ShopifyOrder) -> dict:
+    """Extract customer details from a ShopifyOrder record."""
+    name = order.customer_name or ""
+    email = (order.customer_email or "").strip().lower()
+    phone = ""
+    address = ""
+
+    # Try to get richer data from raw_payload
+    if order.raw_payload:
+        customer = order.raw_payload.get("customer", {}) or {}
+        phone = customer.get("phone") or ""
+
+        # Get default address
+        default_addr = customer.get("default_address", {}) or {}
+        if not default_addr:
+            # Try shipping address from the order itself
+            default_addr = order.raw_payload.get("shipping_address", {}) or {}
+
+        addr_parts = []
+        for field in ["address1", "address2", "city", "province", "zip", "country"]:
+            val = (default_addr.get(field) or "").strip()
+            if val:
+                addr_parts.append(val)
+        address = ", ".join(addr_parts)
+
+        # Also try phone from address if not on customer
+        if not phone:
+            phone = default_addr.get("phone") or ""
+
+    return {
+        "name": name,
+        "email": email,
+        "phone": phone,
+        "address": address,
+        "order_count": 1,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
 # SKU SEARCH (for mapping UI)
 # ══════════════════════════════════════════════════════════════
 

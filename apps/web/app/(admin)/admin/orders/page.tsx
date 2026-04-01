@@ -368,29 +368,31 @@ export default function AdminOrdersPage() {
             </div>
 
             {/* Filter Strip */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 border-b pb-6">
-                <div className="flex p-1 bg-muted/50 rounded-lg border">
-                    {(["All", "Pending", "Approved", "Ready", "Delivered", "Cancelled"] as const).map(option => (
-                        <button
-                            key={option}
-                            onClick={() => setStatusFilter(option)}
-                            className={cn(
-                                "px-4 py-1.5 text-sm font-medium rounded-md transition-all",
-                                statusFilter === option
-                                    ? "bg-white text-foreground shadow-sm"
-                                    : "text-muted-foreground hover:text-foreground/80"
-                            )}
-                        >
-                            {option === "All" ? "All" : option}
-                        </button>
-                    ))}
+            <div className="flex flex-col gap-4 border-b pb-6">
+                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                    <div className="flex p-1 bg-muted/50 rounded-lg border w-fit">
+                        {(["All", "Pending", "Approved", "Ready", "Delivered", "Cancelled"] as const).map(option => (
+                            <button
+                                key={option}
+                                onClick={() => setStatusFilter(option)}
+                                className={cn(
+                                    "px-3 sm:px-4 py-1.5 text-sm font-medium rounded-md transition-all whitespace-nowrap",
+                                    statusFilter === option
+                                        ? "bg-white text-foreground shadow-sm"
+                                        : "text-muted-foreground hover:text-foreground/80"
+                                )}
+                            >
+                                {option === "All" ? "All" : option}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 ml-auto">
-                    <div className="relative">
+                <div className="flex items-center gap-2 sm:ml-auto">
+                    <div className="relative flex-1 sm:flex-none">
                         <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                         <Input
                             type="date"
-                            className="pl-9 w-[180px] bg-background"
+                            className="pl-9 w-full sm:w-[180px] bg-background"
                             value={dateFilter}
                             onChange={e => setDateFilter(e.target.value)}
                         />
@@ -416,15 +418,16 @@ export default function AdminOrdersPage() {
                             description="Adjust your filters to see more results."
                         />
                     ) : (
+                        <div className="overflow-x-auto">
                         <Table>
                             <TableHeader className="bg-muted/30">
                                 <TableRow>
                                     <TableHead className="w-[120px]">Status</TableHead>
                                     <TableHead>Client / Store</TableHead>
-                                    <TableHead className="w-[110px]">Products</TableHead>
-                                    <TableHead className="w-[110px]">Delivered</TableHead>
-                                    <TableHead>Placed Order</TableHead>
-                                    <TableHead>Delivery Date</TableHead>
+                                    <TableHead className="w-[110px] hidden sm:table-cell">Products</TableHead>
+                                    <TableHead className="w-[110px] hidden sm:table-cell">Delivered</TableHead>
+                                    <TableHead className="hidden md:table-cell">Placed Order</TableHead>
+                                    <TableHead className="hidden md:table-cell">Delivery Date</TableHead>
                                     <TableHead className="text-right">Total Value</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -450,7 +453,7 @@ export default function AdminOrdersPage() {
                                             <div className="font-medium">{getClientDisplayName(order)}</div>
                                             <div className="text-xs text-muted-foreground font-mono">#{order.id.slice(0, 6)}</div>
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="hidden sm:table-cell">
                                             {order.is_ready_for_delivery ? (
                                                 <Badge variant="outline" className="border-emerald-200 bg-emerald-100 text-emerald-700">
                                                     Ready
@@ -461,7 +464,7 @@ export default function AdminOrdersPage() {
                                                 </Badge>
                                             )}
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="hidden sm:table-cell">
                                             {(() => {
                                                 const label = getDeliveryStatusLabel(order);
                                                 return (
@@ -471,10 +474,10 @@ export default function AdminOrdersPage() {
                                                 );
                                             })()}
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground">
+                                        <TableCell className="text-muted-foreground hidden md:table-cell">
                                             {new Date(order.created_at).toLocaleDateString("en-GB", { day: 'numeric', month: 'short', year: 'numeric' })}
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground">
+                                        <TableCell className="text-muted-foreground hidden md:table-cell">
                                             {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB", { day: 'numeric', month: 'short', year: 'numeric' }) : "-"}
                                         </TableCell>
                                         <TableCell className="text-right font-medium">
@@ -484,6 +487,7 @@ export default function AdminOrdersPage() {
                                 ))}
                             </TableBody>
                         </Table>
+                        </div>
                     )}
                 </div>
                 {filteredOrders.length > 0 && (
@@ -495,7 +499,7 @@ export default function AdminOrdersPage() {
 
             {/* Dialogs (Keep Existing functionality) */}
             <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-3">
                             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
