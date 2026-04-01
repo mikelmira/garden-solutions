@@ -31,6 +31,7 @@ from app.core.config import get_settings
 from app.models.shopify import ShopifyProduct, ShopifyVariant, ShopifyOrder, ShopifyWebhookEvent
 from app.models.order import Order, OrderStatus, OrderSource
 from app.models.order_item import OrderItem
+from app.models.product import Product
 from app.models.sku import SKU
 from app.models.store import Store
 from app.models.client import Client
@@ -269,22 +270,30 @@ class ShopifyService:
         Matching strategy:
         1. Exact match on SKU code (shopify_sku == sku.code)
         2. Case-insensitive match on SKU code
+        3. Match by Shopify product title against internal Product.name (for stores without SKU codes)
         """
-        if not variant.shopify_sku:
-            return False
+        sku = None
 
-        # Strategy 1: Exact match
-        sku = self.db.query(SKU).filter(
-            SKU.code == variant.shopify_sku,
-            SKU.is_active.is_(True),
-        ).first()
-
-        # Strategy 2: Case-insensitive
-        if not sku:
+        # Strategy 1 & 2: SKU code matching (only if Shopify has a SKU)
+        if variant.shopify_sku:
+            # Strategy 1: Exact match
             sku = self.db.query(SKU).filter(
-                func.lower(SKU.code) == variant.shopify_sku.lower(),
+                SKU.code == variant.shopify_sku,
                 SKU.is_active.is_(True),
             ).first()
+
+            # Strategy 2: Case-insensitive
+            if not sku:
+                sku = self.db.query(SKU).filter(
+                    func.lower(SKU.code) == variant.shopify_sku.lower(),
+                    SKU.is_active.is_(True),
+                ).first()
+
+        # Strategy 3: Match by Shopify product title → internal Product.name
+        if not sku and variant.shopify_product:
+            product_title = (variant.shopify_product.title or "").strip().lower()
+            if product_title:
+                sku = self._match_sku_by_product_name(product_title)
 
         if sku:
             variant.sku_id = sku.id
@@ -292,6 +301,7 @@ class ShopifyService:
             _log_shopify_event("shopify.variant_mapped", {
                 "shopify_variant_id": variant.shopify_variant_id,
                 "shopify_sku": variant.shopify_sku,
+                "product_title": variant.shopify_product.title if variant.shopify_product else None,
                 "internal_sku_id": str(sku.id),
                 "internal_sku_code": sku.code,
                 "method": "auto",
@@ -304,6 +314,39 @@ class ShopifyService:
                 "product_title": variant.shopify_product.title if variant.shopify_product else None,
             })
             return False
+
+    def _match_sku_by_product_name(self, search_name: str) -> SKU | None:
+        """
+        Find an internal SKU by matching a search name against Product.name.
+        Tries: exact match, case-insensitive match, then contains match.
+        Returns the first active SKU of the matched product.
+        """
+        # Exact case-insensitive match
+        product = self.db.query(Product).filter(
+            func.lower(Product.name) == search_name,
+            Product.is_active.is_(True),
+        ).first()
+
+        # Partial/contains match (Shopify title contains our product name or vice versa)
+        if not product:
+            products = self.db.query(Product).filter(
+                Product.is_active.is_(True),
+            ).all()
+            for p in products:
+                p_name = p.name.strip().lower()
+                if p_name in search_name or search_name in p_name:
+                    product = p
+                    break
+
+        if not product:
+            return None
+
+        # Get first active SKU for this product
+        sku = self.db.query(SKU).filter(
+            SKU.product_id == product.id,
+            SKU.is_active.is_(True),
+        ).first()
+        return sku
 
     # ══════════════════════════════════════════════════════════════
     # MANUAL VARIANT MAPPING (Admin)
@@ -551,14 +594,25 @@ class ShopifyService:
 
         delivery_date = date.today() + timedelta(days=14)
 
+        # Extract customer name for order notes
+        customer = order_data.get("customer", {}) or {}
+        customer_name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip()
+        if not customer_name:
+            customer_name = order_data.get("contact_email", "Unknown Customer")
+
+        # Use Shopify's total_price as the order amount
+        shopify_total = Decimal(str(order_data.get("total_price", "0")))
+
+        order_notes = f"Shopify order #{order_data.get('order_number', 'N/A')} — Customer: {customer_name}"
+
         order = Order(
             store_id=store_id,
             created_by=system_user_id,
             order_source=OrderSource.SHOPIFY,
             delivery_date=delivery_date,
             status=OrderStatus.PENDING_APPROVAL,
-            total_price_rands=Decimal("0.00"),
-            notes=f"Shopify order #{order_data.get('order_number', 'N/A')}",
+            total_price_rands=shopify_total,
+            notes=order_notes,
         )
         self.db.add(order)
         self.db.flush()
@@ -571,33 +625,31 @@ class ShopifyService:
         for li in line_items:
             variant_id = li.get("variant_id")
             quantity = li.get("quantity", 1)
+            li_title = (li.get("title") or "").strip()
 
-            if not variant_id:
-                unmapped.append({"title": li.get("title"), "reason": "no_variant_id"})
-                continue
+            sku = None
 
-            # Find our mapping
-            sv = (
-                self.db.query(ShopifyVariant)
-                .filter(ShopifyVariant.shopify_variant_id == variant_id)
-                .first()
-            )
+            # Try 1: Find via existing Shopify variant mapping
+            if variant_id:
+                sv = (
+                    self.db.query(ShopifyVariant)
+                    .filter(ShopifyVariant.shopify_variant_id == variant_id)
+                    .first()
+                )
 
-            if not sv or sv.mapping_status != "mapped" or not sv.sku_id:
+                if sv and sv.mapping_status == "mapped" and sv.sku_id:
+                    sku = self.db.query(SKU).filter(SKU.id == sv.sku_id, SKU.is_active.is_(True)).first()
+
+            # Try 2: Match by line item title against internal Product.name
+            if not sku and li_title:
+                sku = self._match_sku_by_product_name(li_title.lower())
+
+            if not sku:
                 unmapped.append({
                     "shopify_variant_id": variant_id,
-                    "title": li.get("title"),
+                    "title": li_title,
                     "sku": li.get("sku"),
-                    "reason": "unmapped_variant",
-                })
-                continue
-
-            sku = self.db.query(SKU).filter(SKU.id == sv.sku_id).first()
-            if not sku or not sku.is_active:
-                unmapped.append({
-                    "shopify_variant_id": variant_id,
-                    "title": li.get("title"),
-                    "reason": "sku_inactive",
+                    "reason": "unmapped_variant" if variant_id else "no_variant_id",
                 })
                 continue
 
@@ -614,7 +666,10 @@ class ShopifyService:
             self.db.add(order_item)
             total_price += effective_price * quantity
 
-        order.total_price_rands = total_price
+        # Use calculated internal price if we matched items, otherwise keep Shopify total
+        if total_price > Decimal("0.00"):
+            order.total_price_rands = total_price
+        # else: keep shopify_total that was set initially
 
         # Audit
         self.audit.log(
