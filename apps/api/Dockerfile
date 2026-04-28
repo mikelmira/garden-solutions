@@ -21,5 +21,5 @@ RUN mkdir -p /app/uploads
 ENV PORT=8000
 EXPOSE ${PORT}
 
-# Run with uvicorn using the PORT env var
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 2
+# Run with uvicorn using the PORT env var (1 worker for trial plan memory limits)
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
