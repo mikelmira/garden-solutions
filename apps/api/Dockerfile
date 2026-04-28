@@ -17,12 +17,9 @@ COPY . .
 # Create uploads directory
 RUN mkdir -p /app/uploads
 
-# Expose port
-EXPOSE 8000
+# Railway injects PORT; default to 8000 for local dev
+ENV PORT=8000
+EXPOSE ${PORT}
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run with uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Run with uvicorn using the PORT env var
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 2
