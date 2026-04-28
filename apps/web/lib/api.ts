@@ -93,7 +93,8 @@ function resolveImageUrl(url: string | null | undefined): string | null {
     if (!url) return null;
     if (url.startsWith("http")) return url;
     // Relative path from backend - prepend backend base
-    return `http://localhost:8000${url}`;
+    const backendBase = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") || "http://localhost:8000";
+    return `${backendBase}${url}`;
 }
 
 function mapProductFromApi(data: any): Product {

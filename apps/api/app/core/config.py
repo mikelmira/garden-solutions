@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # Database
+    # Railway/render provides DATABASE_URL — use it directly if set
+    DATABASE_URL: str | None = None
     POSTGRES_USER: str = "admin"
     POSTGRES_PASSWORD: str = "password"
     POSTGRES_SERVER: str = "localhost"
@@ -42,10 +44,14 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context):
         if not self.SQLALCHEMY_DATABASE_URI:
-            self.SQLALCHEMY_DATABASE_URI = (
-                f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-                f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-            )
+            if self.DATABASE_URL:
+                # Railway/Render provide DATABASE_URL — use directly
+                self.SQLALCHEMY_DATABASE_URI = self.DATABASE_URL
+            else:
+                self.SQLALCHEMY_DATABASE_URI = (
+                    f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+                    f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+                )
 
         if self.ENVIRONMENT == "production":
             if not self.SECRET_KEY or self.SECRET_KEY == _DEV_SECRET_KEY:
