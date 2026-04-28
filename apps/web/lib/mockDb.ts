@@ -233,68 +233,7 @@ const SEED_DELIVERY_TEAMS: DeliveryTeam[] = [
     },
 ];
 
-const SEED_ORDERS: Order[] = [
-    {
-        id: "ORD-001",
-        client_id: "c1",
-        client_name: "Pot & Planter (Pty) Ltd t/a The Pot Shack",
-        created_at: new Date().toISOString(),
-        delivery_date: "2026-04-01",
-        status: "Pending Approval",
-        total_price_rands: 1500,
-        items: [
-            { id: "i1", sku_id: "sku1", quantity_ordered: 10, unit_price_rands: 901, quantity_manufactured: 5, quantity_delivered: 0 }
-        ]
-    },
-    {
-        id: "ORD-002",
-        client_id: "s5",
-        client_name: "PotShack Online Store",
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-        delivery_date: "2026-04-05",
-        status: "Approved",
-        total_price_rands: 18020,
-        items: [
-            { id: "i2", sku_id: "sku4", quantity_ordered: 20, unit_price_rands: 812, quantity_manufactured: 20, quantity_delivered: 0 }
-        ]
-    },
-    {
-        id: "ORD-003",
-        client_id: "c2",
-        client_name: "Adeo/Leroy Merlin South Africa (Pty) Ltd",
-        created_at: new Date(Date.now() - 172800000).toISOString(),
-        delivery_date: "2026-04-10",
-        status: "Pending Approval",
-        total_price_rands: 28020,
-        items: [
-            { id: "i3", sku_id: "sku7", quantity_ordered: 15, unit_price_rands: 1868, quantity_manufactured: 0, quantity_delivered: 0 }
-        ]
-    },
-    {
-        id: "ORD-004",
-        client_id: "c3",
-        client_name: "STODELS NURSERIES",
-        created_at: new Date(Date.now() - 259200000).toISOString(),
-        delivery_date: "2026-04-12",
-        status: "Delivered",
-        total_price_rands: 49750,
-        items: [
-            { id: "i4", sku_id: "sku9", quantity_ordered: 50, unit_price_rands: 995, quantity_manufactured: 50, quantity_delivered: 50 }
-        ]
-    },
-    {
-        id: "ORD-005",
-        client_id: "c4",
-        client_name: "LIFESTYLE GARDEN CENTRE (PTY) LTD",
-        created_at: new Date(Date.now() - 345600000).toISOString(),
-        delivery_date: "2026-04-15",
-        status: "In Production",
-        total_price_rands: 5400,
-        items: [
-            { id: "i5", sku_id: "sku11", quantity_ordered: 12, unit_price_rands: 450, quantity_manufactured: 6, quantity_delivered: 0 }
-        ]
-    }
-];
+const SEED_ORDERS: Order[] = [];
 
 // Helper to get from storage or seed
 const getStorage = <T>(key: string, seed: T[]): T[] => {
