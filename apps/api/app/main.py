@@ -118,22 +118,6 @@ app.mount("/uploads", StaticFiles(directory=str(static_dir)), name="uploads")
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
-@app.on_event("startup")
-def run_migrations():
-    """Auto-run Alembic migrations on startup in production."""
-    if settings.ENVIRONMENT == "production":
-        try:
-            from alembic.config import Config
-            from alembic import command
-            alembic_cfg = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
-            alembic_cfg.set_main_option("sqlalchemy.url", settings.SQLALCHEMY_DATABASE_URI)
-            command.upgrade(alembic_cfg, "head")
-            lifecycle_logger.info("Alembic migrations applied successfully")
-        except Exception as e:
-            lifecycle_logger.error(f"Migration failed: {e}")
-            raise
-
-
 @app.get("/")
 def read_root():
     """Health check endpoint."""
