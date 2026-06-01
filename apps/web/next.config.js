@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    output: "standalone",
+    // NOTE: standalone output is intentionally NOT enabled here. Next.js's
+    // standalone tracing has long-standing issues with pnpm workspaces (the
+    // node_modules symlinks land at wrong relative depth and the `.pnpm`
+    // store is left empty in the traced output). The Dockerfile installs
+    // production deps in the runner stage and runs `next start` instead.
     images: {
         remotePatterns: [
             {

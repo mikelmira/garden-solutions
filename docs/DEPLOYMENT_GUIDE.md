@@ -290,14 +290,13 @@ volumes:
 
 ## Step 6: Fix the Next.js Config for Production
 
-Your Next.js config needs `output: 'standalone'` for the Docker build to work (the Dockerfile expects it), and the image domains need to point to your production URL. This is a code change you'll need to make before deploying.
+You only need to set `images.remotePatterns` so Next.js will allow your production hostname for `next/image` URLs. This is a code change you'll need to make before deploying.
 
-In `apps/web/next.config.js`, update to:
+In `apps/web/next.config.js`, set:
 
 ```js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    output: 'standalone',
     images: {
         remotePatterns: [
             {
@@ -329,6 +328,9 @@ const nextConfig = {
 
 module.exports = nextConfig;
 ```
+
+> **Important — do NOT add `output: 'standalone'` here.**
+> Next.js's `standalone` tracing has long-standing compatibility issues with pnpm workspaces: the bundled `node_modules` symlinks land at the wrong relative depth and the `.pnpm` store ends up empty in the traced output, so the container crashes at startup with `Cannot find module 'next'`. The `apps/web/Dockerfile` installs production dependencies in the runner stage and runs `next start` directly, which avoids the issue entirely. If you ever migrate off pnpm (e.g. to npm or yarn), standalone becomes safe to enable again.
 
 Commit and push this change before deploying.
 
