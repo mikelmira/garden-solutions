@@ -451,7 +451,11 @@ export default function AdminOrdersPage() {
                                         </TableCell>
                                         <TableCell>
                                             <div className="font-medium">{getClientDisplayName(order)}</div>
-                                            <div className="text-xs text-muted-foreground font-mono">#{order.id.slice(0, 6)}</div>
+                                            {order.customer_name ? (
+                                                <div className="text-xs text-muted-foreground">{order.customer_name}</div>
+                                            ) : (
+                                                <div className="text-xs text-muted-foreground font-mono">#{order.id.slice(0, 6)}</div>
+                                            )}
                                         </TableCell>
                                         <TableCell className="hidden sm:table-cell">
                                             {order.is_ready_for_delivery ? (

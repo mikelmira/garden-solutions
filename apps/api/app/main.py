@@ -55,7 +55,7 @@ LOGGING_CONFIG = {
 logging.config.dictConfig(LOGGING_CONFIG)
 from app.core.exceptions import AppException, app_exception_handler, generic_exception_handler
 from app.core.database import SessionLocal
-from app.routers import auth, clients, products, price_tiers, orders, manufacturing, moulding, order_items, delivery, sales_agents, delivery_teams, factory_teams, public, stores, skus, ops, analytics, shopify, shopify_webhooks
+from app.routers import auth, clients, products, price_tiers, orders, manufacturing, moulding, order_items, delivery, sales_agents, delivery_teams, factory_teams, painting, painting_teams, email_recipients, email_automations, public, stores, skus, ops, analytics, shopify, shopify_webhooks
 
 settings = get_settings()
 logger = logging.getLogger("app.request")
@@ -104,6 +104,10 @@ app.include_router(delivery.router, prefix=f"{settings.API_V1_STR}/delivery", ta
 app.include_router(sales_agents.router, prefix=f"{settings.API_V1_STR}/sales-agents", tags=["sales-agents"])
 app.include_router(delivery_teams.router, prefix=f"{settings.API_V1_STR}/delivery-teams", tags=["delivery-teams"])
 app.include_router(factory_teams.router, prefix=f"{settings.API_V1_STR}/factory-teams", tags=["factory-teams"])
+app.include_router(painting.router, prefix=f"{settings.API_V1_STR}/painting", tags=["painting"])
+app.include_router(painting_teams.router, prefix=f"{settings.API_V1_STR}/painting-teams", tags=["painting-teams"])
+app.include_router(email_recipients.router, prefix=f"{settings.API_V1_STR}/email-recipients", tags=["email-recipients"])
+app.include_router(email_automations.router, prefix=f"{settings.API_V1_STR}/email-automations", tags=["email-automations"])
 app.include_router(stores.router, prefix=f"{settings.API_V1_STR}", tags=["stores"])
 app.include_router(public.router, prefix=f"{settings.API_V1_STR}/public", tags=["public"])
 app.include_router(ops.router, prefix=f"{settings.API_V1_STR}/ops", tags=["operations"])
@@ -116,6 +120,22 @@ static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(static_dir)), name="uploads")
 # Backward compat: also serve /static from the same directory for old image_url records
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+# ── Email automation scheduler (background thread) ────────────────────
+from app.services.email_automation import start_scheduler, stop_scheduler
+
+
+@app.on_event("startup")
+def _start_email_automation_scheduler():
+    start_scheduler()
+    lifecycle_logger.info("email automation scheduler started")
+
+
+@app.on_event("shutdown")
+def _stop_email_automation_scheduler():
+    stop_scheduler()
+    lifecycle_logger.info("email automation scheduler stopped")
 
 
 @app.get("/")

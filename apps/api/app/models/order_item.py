@@ -35,6 +35,8 @@ class OrderItemStatus:
     PENDING = "pending"
     MANUFACTURING = "manufacturing"
     MANUFACTURED = "manufactured"
+    PAINTING = "painting"
+    PAINTED = "painted"
     PARTIALLY_DELIVERED = "partially_delivered"
     DELIVERED = "delivered"
 
@@ -47,6 +49,7 @@ class OrderItem(Base):
     sku_id = Column(UUID(as_uuid=True), ForeignKey("skus.id"), nullable=False)
     quantity_ordered = Column(Integer, nullable=False)
     quantity_manufactured = Column(Integer, nullable=False, default=0)
+    quantity_painted = Column(Integer, nullable=False, default=0)  # Sprint: Painting stage
     quantity_allocated = Column(Integer, nullable=False, default=0)  # Inventory allocated to this item
     quantity_delivered = Column(Integer, nullable=False, default=0)
     unit_price_rands = Column(Numeric(12, 2), nullable=False)  # Snapshot at order creation
@@ -59,16 +62,29 @@ class OrderItem(Base):
 
     @property
     def derived_status(self) -> str:
-        """Calculate status based on quantities."""
+        """Calculate status based on quantities.
+
+        Lifecycle: PENDING -> MANUFACTURING -> MANUFACTURED -> PAINTING -> PAINTED
+                   -> PARTIALLY_DELIVERED -> DELIVERED
+        """
         if self.quantity_delivered == self.quantity_ordered:
             return OrderItemStatus.DELIVERED
         if self.quantity_delivered > 0:
             return OrderItemStatus.PARTIALLY_DELIVERED
+        if self.quantity_painted == self.quantity_ordered:
+            return OrderItemStatus.PAINTED
+        if self.quantity_painted > 0:
+            return OrderItemStatus.PAINTING
         if self.quantity_manufactured == self.quantity_ordered:
             return OrderItemStatus.MANUFACTURED
         if self.quantity_manufactured > 0:
             return OrderItemStatus.MANUFACTURING
         return OrderItemStatus.PENDING
+
+    @property
+    def quantity_outstanding_paint(self) -> int:
+        """Quantity that has been moulded but not yet painted."""
+        return max(0, self.quantity_manufactured - self.quantity_painted)
 
     @property
     def quantity_outstanding(self) -> int:

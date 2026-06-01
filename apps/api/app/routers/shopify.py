@@ -23,6 +23,7 @@ from app.models.shopify import ShopifyProduct, ShopifyVariant, ShopifyOrder, Sho
 from app.models.store import Store
 from app.models.sku import SKU
 from app.services.shopify import ShopifyService
+from app.services.shopify_push import ShopifyPushService, ShopifyPushError
 
 router = APIRouter()
 
@@ -539,3 +540,194 @@ def search_internal_skus(
         })
 
     return DataResponse(data=data)
+
+
+# ══════════════════════════════════════════════════════════════
+# PUSH TO SHOPIFY (dashboard = source of truth)
+# ══════════════════════════════════════════════════════════════
+
+
+class ShopifyProductUpdate(BaseModel):
+    title: str | None = None
+    product_type: str | None = None
+    vendor: str | None = None
+    status: str | None = None  # active | draft | archived
+    body_html: str | None = None
+
+
+class ShopifyVariantUpdate(BaseModel):
+    title: str | None = None
+    price: str | None = None
+    sku: str | None = None
+    option1: str | None = None
+    option2: str | None = None
+    option3: str | None = None
+
+
+class ShopifyVariantCreate(BaseModel):
+    title: str | None = None
+    price: str = "0.00"
+    sku: str | None = None
+    option1: str | None = None
+    option2: str | None = None
+    option3: str | None = None
+
+
+class ShopifyInventorySet(BaseModel):
+    quantity: int
+    location_id: int | None = None
+
+
+def _serialize_variant(v: ShopifyVariant) -> dict:
+    return {
+        "id": str(v.id),
+        "shopify_variant_id": v.shopify_variant_id,
+        "shopify_product_id": v.shopify_product_id,
+        "title": v.title,
+        "shopify_sku": v.shopify_sku,
+        "price": v.price,
+        "option1": v.option1,
+        "option2": v.option2,
+        "option3": v.option3,
+        "inventory_quantity": v.inventory_quantity,
+        "inventory_item_id": v.inventory_item_id,
+        "mapping_status": v.mapping_status,
+        "sku_id": str(v.sku_id) if v.sku_id else None,
+    }
+
+
+def _serialize_product(p: ShopifyProduct) -> dict:
+    return {
+        "id": str(p.id),
+        "shopify_product_id": p.shopify_product_id,
+        "store_id": str(p.store_id),
+        "title": p.title,
+        "product_type": p.product_type,
+        "vendor": p.vendor,
+        "shopify_handle": p.shopify_handle,
+        "shopify_status": p.shopify_status,
+        "variants": [_serialize_variant(v) for v in (p.variants or [])],
+    }
+
+
+@router.get("/products/{product_id}")
+def get_shopify_product(
+    product_id: UUID,
+    current_user: AdminUser,
+    db: Session = Depends(get_db),
+):
+    """Get a single Shopify product with its variants (for the edit page)."""
+    product = db.query(ShopifyProduct).filter(ShopifyProduct.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Shopify product not found")
+    return DataResponse(data=_serialize_product(product))
+
+
+@router.patch("/products/{product_id}")
+def push_update_product(
+    product_id: UUID,
+    data: ShopifyProductUpdate,
+    current_user: AdminUser,
+    db: Session = Depends(get_db),
+):
+    """Update product fields locally AND push to Shopify."""
+    service = ShopifyPushService(db)
+    try:
+        product = service.update_product(
+            product_id,
+            title=data.title,
+            product_type=data.product_type,
+            vendor=data.vendor,
+            status=data.status,
+            body_html=data.body_html,
+            performed_by=current_user.id,
+        )
+    except ShopifyPushError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return DataResponse(data=_serialize_product(product))
+
+
+@router.patch("/variants/{variant_id}/push")
+def push_update_variant(
+    variant_id: UUID,
+    data: ShopifyVariantUpdate,
+    current_user: AdminUser,
+    db: Session = Depends(get_db),
+):
+    """Update variant fields locally AND push to Shopify (title/price/sku/options)."""
+    service = ShopifyPushService(db)
+    try:
+        variant = service.update_variant(
+            variant_id,
+            title=data.title,
+            price=data.price,
+            sku=data.sku,
+            option1=data.option1,
+            option2=data.option2,
+            option3=data.option3,
+            performed_by=current_user.id,
+        )
+    except ShopifyPushError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return DataResponse(data=_serialize_variant(variant))
+
+
+@router.post("/products/{product_id}/variants")
+def push_create_variant(
+    product_id: UUID,
+    data: ShopifyVariantCreate,
+    current_user: AdminUser,
+    db: Session = Depends(get_db),
+):
+    """Create a new variant on Shopify under the given product."""
+    service = ShopifyPushService(db)
+    try:
+        variant = service.create_variant(
+            product_id,
+            title=data.title,
+            price=data.price,
+            sku=data.sku,
+            option1=data.option1,
+            option2=data.option2,
+            option3=data.option3,
+            performed_by=current_user.id,
+        )
+    except ShopifyPushError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return DataResponse(data=_serialize_variant(variant))
+
+
+@router.delete("/variants/{variant_id}/push")
+def push_delete_variant(
+    variant_id: UUID,
+    current_user: AdminUser,
+    db: Session = Depends(get_db),
+):
+    """Delete a variant on Shopify and locally."""
+    service = ShopifyPushService(db)
+    try:
+        service.delete_variant(variant_id, performed_by=current_user.id)
+    except ShopifyPushError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return DataResponse(data={"deleted": True})
+
+
+@router.post("/variants/{variant_id}/inventory")
+def push_set_inventory(
+    variant_id: UUID,
+    data: ShopifyInventorySet,
+    current_user: AdminUser,
+    db: Session = Depends(get_db),
+):
+    """Set inventory level for a variant on Shopify."""
+    service = ShopifyPushService(db)
+    try:
+        variant = service.set_inventory_level(
+            variant_id,
+            quantity=data.quantity,
+            location_id=data.location_id,
+            performed_by=current_user.id,
+        )
+    except ShopifyPushError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return DataResponse(data=_serialize_variant(variant))

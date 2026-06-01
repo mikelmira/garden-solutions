@@ -23,10 +23,17 @@ class DeliveryService:
         self.audit_service = AuditService(db)
 
     def _is_ready_for_delivery(self, order: Order) -> bool:
-        """Ready = all items manufactured AND allocated."""
+        """Ready = all items manufactured AND allocated AND painted.
+
+        Painting was added as a stage between moulding and delivery — orders
+        must complete the painting plan before they show up as deliverable.
+        """
+        if not order.items:
+            return False
         return all(
             item.quantity_manufactured >= item.quantity_ordered
             and item.quantity_allocated >= item.quantity_ordered
+            and item.quantity_painted >= item.quantity_ordered
             for item in order.items
         )
 
@@ -62,7 +69,7 @@ class DeliveryService:
             self.db.query(Order)
             .filter(
                 Order.status.in_(
-                    [OrderStatus.APPROVED, OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED]
+                    [OrderStatus.APPROVED, OrderStatus.PAINTING, OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED]
                 )
             )
             .order_by(Order.delivery_date.asc(), Order.created_at.asc())
@@ -104,7 +111,7 @@ class DeliveryService:
                 )
 
             status_value = order.status
-            if order.status == OrderStatus.APPROVED and self._is_ready_for_delivery(order):
+            if order.status in (OrderStatus.APPROVED, OrderStatus.PAINTING) and self._is_ready_for_delivery(order):
                 status_value = OrderStatus.READY_FOR_DELIVERY
 
             result.append(
@@ -135,7 +142,7 @@ class DeliveryService:
             .filter(Order.delivery_paused.is_(False))
             .filter(
                 Order.status.in_(
-                    [OrderStatus.APPROVED, OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED]
+                    [OrderStatus.APPROVED, OrderStatus.PAINTING, OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED]
                 )
             )
             .order_by(Order.created_at.asc())
@@ -174,7 +181,7 @@ class DeliveryService:
                 )
 
             status_value = order.status
-            if order.status == OrderStatus.APPROVED and self._is_ready_for_delivery(order):
+            if order.status in (OrderStatus.APPROVED, OrderStatus.PAINTING) and self._is_ready_for_delivery(order):
                 status_value = OrderStatus.READY_FOR_DELIVERY
 
             result.append(
@@ -249,7 +256,7 @@ class DeliveryService:
             order = self.db.query(Order).filter(Order.id == order_id).first()
             if not order:
                 raise NotFoundException(f"Order with id {order_id} not found")
-            if order.status not in [OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED, OrderStatus.APPROVED]:
+            if order.status not in [OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED, OrderStatus.APPROVED, OrderStatus.PAINTING]:
                 raise ConflictException("Order is not in a deliverable state")
             if not self._is_ready_for_delivery(order):
                 raise ConflictException("Order is not ready for delivery")
@@ -305,7 +312,7 @@ class DeliveryService:
             order = self.db.query(Order).filter(Order.id == order_id).first()
             if not order:
                 raise NotFoundException(f"Order with id {order_id} not found")
-            if order.status not in [OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED, OrderStatus.APPROVED]:
+            if order.status not in [OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED, OrderStatus.APPROVED, OrderStatus.PAINTING]:
                 raise ConflictException("Order is not in a deliverable state")
             if not self._is_ready_for_delivery(order):
                 raise ConflictException("Order is not ready for delivery")
@@ -374,7 +381,7 @@ class DeliveryService:
                 raise NotFoundException(f"Order with id {order_id} not found")
             if order.delivery_team_id != team.id:
                 raise ConflictException("Order is not assigned to this delivery team")
-            if order.status not in [OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED, OrderStatus.APPROVED]:
+            if order.status not in [OrderStatus.READY_FOR_DELIVERY, OrderStatus.PARTIALLY_DELIVERED, OrderStatus.APPROVED, OrderStatus.PAINTING]:
                 raise ConflictException("Order is not in a deliverable state")
             if not self._is_ready_for_delivery(order):
                 raise ConflictException("Order is not ready for delivery")

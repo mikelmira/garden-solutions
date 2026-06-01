@@ -41,6 +41,10 @@ def _enrich_order_response(order, db: Session) -> dict:
         payload["client_name"] = f"Store: {order.store.name}"
     else:
         payload["client_name"] = None
+    # Surface Shopify shopper's name when this order originated from Shopify.
+    # B2B orders have no separate customer name and stay None.
+    shopify_order = getattr(order, "shopify_order", None)
+    payload["customer_name"] = shopify_order.customer_name if shopify_order else None
     return payload
 
 

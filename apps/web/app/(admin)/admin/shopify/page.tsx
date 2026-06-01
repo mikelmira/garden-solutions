@@ -22,6 +22,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { ProductsTabs } from "@/components/admin/ProductsTabs";
 import {
     Loader2,
     RefreshCw,
@@ -159,6 +160,7 @@ export default function ShopifyAdminPage() {
 
     return (
         <div className="space-y-6">
+            <ProductsTabs />
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-heading font-bold tracking-tight">Shopify Integration</h1>

@@ -17,6 +17,12 @@ from app.models.factory_team_member import FactoryTeamMember
 from app.models.store import Store
 from app.models.inventory import InventoryItem
 from app.models.manufacturing_day import ManufacturingDay, ManufacturingDayItem
+from app.models.painting_team import PaintingTeam
+from app.models.painting_team_member import PaintingTeamMember
+from app.models.painting_day import PaintingDay, PaintingDayItem
+from app.models.email_recipient import EmailRecipient, EmailRecipientCategory
+from app.models.email_automation import EmailAutomation, EmailAutomationPlanType, EmailAutomationFrequency
+from app.models.shopify import ShopifyProduct, ShopifyVariant, ShopifyOrder, ShopifyWebhookEvent
 
 __all__ = [
     "User",
@@ -40,4 +46,17 @@ __all__ = [
     "InventoryItem",
     "ManufacturingDay",
     "ManufacturingDayItem",
+    "PaintingTeam",
+    "PaintingTeamMember",
+    "PaintingDay",
+    "PaintingDayItem",
+    "EmailRecipient",
+    "EmailRecipientCategory",
+    "EmailAutomation",
+    "EmailAutomationPlanType",
+    "EmailAutomationFrequency",
+    "ShopifyProduct",
+    "ShopifyVariant",
+    "ShopifyOrder",
+    "ShopifyWebhookEvent",
 ]

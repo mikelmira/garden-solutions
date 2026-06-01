@@ -25,6 +25,14 @@ from app.models.user import User
 from app.core.exceptions import NotFoundException, ConflictException, ForbiddenException
 from app.models.factory_team_member import FactoryTeamMember
 from app.models.factory_team import FactoryTeam
+from app.models.painting_team_member import PaintingTeamMember
+from app.models.painting_team import PaintingTeam
+from app.services.painting_day import PaintingDayService
+from app.schemas.painting import (
+    PaintingPlanResponse,
+    PaintingPlanItemResponse,
+    PaintingPlanItemComplete,
+)
 
 settings = get_settings()
 
@@ -250,3 +258,89 @@ def public_moulding_update_item(
     }
 
     return DataResponse(data=ManufacturingDayItemResponse.model_validate(response))
+
+
+# ──────────────────────────────────────────────────────────────────
+# Painting (code-based access, mirrors moulding pattern)
+# ──────────────────────────────────────────────────────────────────
+
+
+def _is_valid_painting_code(db: Session, code: str) -> bool:
+    if not code:
+        return False
+    member = (
+        db.query(PaintingTeamMember)
+        .join(PaintingTeam, PaintingTeam.id == PaintingTeamMember.painting_team_id)
+        .filter(
+            PaintingTeamMember.code == code,
+            PaintingTeamMember.is_active.is_(True),
+            PaintingTeam.is_active.is_(True),
+        )
+        .first()
+    )
+    if member:
+        return True
+    team = (
+        db.query(PaintingTeam)
+        .filter(PaintingTeam.code == code, PaintingTeam.is_active.is_(True))
+        .first()
+    )
+    return team is not None
+
+
+@router.post("/painting/verify", response_model=DataResponse[dict])
+def verify_painting_code(
+    painting_code: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+):
+    """Verify painting code for painting page access."""
+    if not _is_valid_painting_code(db, painting_code):
+        raise ForbiddenException("Invalid painting code")
+    return DataResponse(data={"valid": True, "code": painting_code})
+
+
+@router.get("/painting/today", response_model=DataResponse[PaintingPlanResponse | None])
+def public_painting_today(
+    x_painting_code: str = Header(..., alias="X-Painting-Code"),
+    db: Session = Depends(get_db),
+):
+    """Today's painting plan for the painting page."""
+    if not _is_valid_painting_code(db, x_painting_code):
+        raise ForbiddenException("Invalid painting code")
+
+    service = PaintingDayService(db)
+    plan = service.get_today_plan()
+    if not plan:
+        return DataResponse(data=None)
+    return DataResponse(
+        data=PaintingPlanResponse.model_validate(service.format_plan_response(plan))
+    )
+
+
+@router.patch(
+    "/painting/items/{item_id}", response_model=DataResponse[PaintingPlanItemResponse]
+)
+def public_painting_update_item(
+    item_id: UUID,
+    data: PaintingPlanItemComplete,
+    x_painting_code: str = Header(..., alias="X-Painting-Code"),
+    db: Session = Depends(get_db),
+):
+    """Record completion against a painting day item."""
+    if not _is_valid_painting_code(db, x_painting_code):
+        raise ForbiddenException("Invalid painting code")
+
+    service = PaintingDayService(db)
+    item = service.update_item_completion(
+        item_id=item_id,
+        quantity_completed=data.quantity_completed,
+        performed_by=None,
+    )
+    response = {
+        "id": item.id,
+        "order_item_id": item.order_item_id,
+        "quantity_planned": item.quantity_planned,
+        "quantity_completed": item.quantity_completed,
+        "remaining": item.quantity_planned - item.quantity_completed,
+    }
+    return DataResponse(data=PaintingPlanItemResponse.model_validate(response))

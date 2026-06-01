@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     SHOPIFY_WEBHOOK_SECRET: str = ""  # HMAC secret for webhook verification
     SHOPIFY_API_VERSION: str = "2024-01"
 
+    # Email (Resend) — used to send daily plan emails to factory/painting teams
+    RESEND_API_KEY: str = ""  # Required to actually send. If empty, sends are skipped.
+    RESEND_FROM_EMAIL: str = "noreply@gsoperations.co.za"
+    RESEND_FROM_NAME: str = "Garden Solutions"
+
     def model_post_init(self, __context):
         if not self.SQLALCHEMY_DATABASE_URI:
             if self.DATABASE_URL:

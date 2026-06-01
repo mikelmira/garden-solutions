@@ -20,6 +20,7 @@ from app.models.sku import SKU
 from app.models.user import User
 from app.services.inventory import InventoryService
 from app.services.audit import AuditService
+from app.services.plan_emails import send_moulding_plan_email
 from app.models.audit_log import AuditAction
 from app.core.exceptions import NotFoundException, ConflictException
 from app.core.logging import log_manufacturing_plan_created, log_manufacturing_completion, log_manufacturing_demand_generated
@@ -225,6 +226,12 @@ class ManufacturingDayService:
             items_count=len(items),
             created_by=created_by,
         )
+
+        # Best-effort: email today's moulding plan to configured recipients.
+        try:
+            send_moulding_plan_email(self.db, plan)
+        except Exception:
+            pass  # Never let email failures break plan creation.
 
         return plan
 

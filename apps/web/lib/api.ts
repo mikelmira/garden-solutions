@@ -1,5 +1,5 @@
 import axios, { AxiosError } from "axios";
-import { CreateOrderPayload, Order, Client, Product, UserProfile, PriceTier, OutstandingDemandResponse, ManufacturingDay, ManufacturingDayCreatePayload, ManufacturingDayItem } from "../types";
+import { CreateOrderPayload, Order, Client, Product, UserProfile, PriceTier, OutstandingDemandResponse, ManufacturingDay, ManufacturingDayCreatePayload, ManufacturingDayItem, PaintingDay, PaintingDayItem, PaintingDemand, PaintingPlanCreatePayload, PaintingTeam, PaintingTeamMember, EmailRecipient, EmailRecipientCategory, EmailAutomation, EmailAutomationCreatePayload, OnceOffSendPayload, OnceOffSendResponse } from "../types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -532,6 +532,51 @@ export const apiService = {
             return res.data.data;
         },
     },
+    painting: {
+        // Authenticated endpoints (admin + painting role)
+        getOutstanding: async (): Promise<PaintingDemand> => {
+            const res = await api.get("/painting/outstanding");
+            return res.data.data;
+        },
+        getTodayPlan: async (): Promise<PaintingDay | null> => {
+            const res = await api.get("/painting/days/today");
+            return res.data.data;
+        },
+        getPlanByDate: async (planDate: string): Promise<PaintingDay | null> => {
+            const res = await api.get(`/painting/days?date=${encodeURIComponent(planDate)}`);
+            return res.data.data;
+        },
+        createPlan: async (payload: PaintingPlanCreatePayload): Promise<PaintingDay> => {
+            const res = await api.post("/painting/days", payload);
+            return res.data.data;
+        },
+        addItemsToPlan: async (payload: { items: { order_item_id: string; quantity_planned: number }[] }): Promise<PaintingDay> => {
+            const res = await api.post("/painting/days/today/items", payload);
+            return res.data.data;
+        },
+        updateItemCompletionAuthed: async (itemId: string, quantityCompleted: number): Promise<PaintingDayItem> => {
+            const res = await api.patch(`/painting/days/items/${itemId}`, { quantity_completed: quantityCompleted });
+            return res.data.data;
+        },
+        // Public, code-based access (mirrors moulding pattern)
+        verifyCode: async (code: string): Promise<{ valid: boolean; code: string }> => {
+            const res = await api.post(`/public/painting/verify?painting_code=${encodeURIComponent(code)}`);
+            return res.data.data;
+        },
+        getTodayPlanPublic: async (paintingCode: string): Promise<PaintingDay | null> => {
+            const res = await api.get("/public/painting/today", {
+                headers: { "X-Painting-Code": paintingCode },
+            });
+            return res.data.data;
+        },
+        updateItemCompletion: async (itemId: string, quantityCompleted: number, paintingCode: string): Promise<PaintingDayItem> => {
+            const res = await api.patch(`/public/painting/items/${itemId}`,
+                { quantity_completed: quantityCompleted },
+                { headers: { "X-Painting-Code": paintingCode } }
+            );
+            return res.data.data;
+        },
+    },
     admin: {
         salesAgents: {
             list: async (): Promise<any[]> => {
@@ -617,6 +662,76 @@ export const apiService = {
                 await api.delete(`/factory-teams/${teamId}/members/${memberId}`);
             }
         },
+        emailRecipients: {
+            list: async (params?: { category?: EmailRecipientCategory; include_inactive?: boolean }): Promise<EmailRecipient[]> => {
+                const res = await api.get("/email-recipients", { params });
+                return res.data.data;
+            },
+            create: async (data: { email: string; name?: string; category: EmailRecipientCategory }): Promise<EmailRecipient> => {
+                const res = await api.post("/email-recipients", data);
+                return res.data.data;
+            },
+            update: async (id: string, data: { email?: string; name?: string; category?: EmailRecipientCategory; is_active?: boolean }): Promise<EmailRecipient> => {
+                const res = await api.patch(`/email-recipients/${id}`, data);
+                return res.data.data;
+            },
+            delete: async (id: string): Promise<void> => {
+                await api.delete(`/email-recipients/${id}`);
+            },
+        },
+        emailAutomations: {
+            list: async (params?: { include_inactive?: boolean }): Promise<EmailAutomation[]> => {
+                const res = await api.get("/email-automations", { params });
+                return res.data.data;
+            },
+            create: async (data: EmailAutomationCreatePayload): Promise<EmailAutomation> => {
+                const res = await api.post("/email-automations", data);
+                return res.data.data;
+            },
+            update: async (id: string, data: Partial<EmailAutomationCreatePayload> & { is_active?: boolean }): Promise<EmailAutomation> => {
+                const res = await api.patch(`/email-automations/${id}`, data);
+                return res.data.data;
+            },
+            delete: async (id: string): Promise<void> => {
+                await api.delete(`/email-automations/${id}`);
+            },
+            runNow: async (id: string): Promise<EmailAutomation> => {
+                const res = await api.post(`/email-automations/${id}/run`);
+                return res.data.data;
+            },
+            sendOnceOff: async (data: OnceOffSendPayload): Promise<OnceOffSendResponse> => {
+                const res = await api.post("/email-automations/send-once-off", data);
+                return res.data.data;
+            },
+        },
+        paintingTeams: {
+            list: async (): Promise<PaintingTeam[]> => {
+                const res = await api.get("/painting-teams");
+                return res.data.data;
+            },
+            create: async (data: { name: string; code: string }): Promise<PaintingTeam> => {
+                const res = await api.post("/painting-teams", data);
+                return res.data.data;
+            },
+            update: async (id: string, data: { name?: string; code?: string; is_active?: boolean }): Promise<PaintingTeam> => {
+                const res = await api.patch(`/painting-teams/${id}`, data);
+                return res.data.data;
+            },
+            delete: async (id: string): Promise<void> => {
+                await api.patch(`/painting-teams/${id}`, { is_active: false });
+            },
+            addMember: async (teamId: string, data: { name: string; code: string; phone?: string }): Promise<PaintingTeamMember> => {
+                const res = await api.post(`/painting-teams/${teamId}/members`, data);
+                return res.data.data;
+            },
+            updateMember: async (teamId: string, memberId: string, data: { name?: string; code?: string; phone?: string; is_active?: boolean }): Promise<PaintingTeamMember> => {
+                const res = await api.patch(`/painting-teams/${teamId}/members/${memberId}`, data);
+                return res.data.data;
+            },
+            removeMember: async (teamId: string, memberId: string): Promise<void> => {
+                await api.delete(`/painting-teams/${teamId}/members/${memberId}`);
+            }
+        },
         analytics: {
             getOverview: async (): Promise<any> => {
                 // Return empty object, page implements logic
@@ -679,6 +794,30 @@ export const apiService = {
             },
             getCustomers: async (q?: string): Promise<any[]> => {
                 const res = await api.get("/shopify/customers", { params: q ? { q } : {} });
+                return res.data.data;
+            },
+            // ── Dashboard-as-source-of-truth push back to Shopify ──
+            getProduct: async (productId: string): Promise<any> => {
+                const res = await api.get(`/shopify/products/${productId}`);
+                return res.data.data;
+            },
+            updateProduct: async (productId: string, data: { title?: string; product_type?: string; vendor?: string; status?: string; body_html?: string }): Promise<any> => {
+                const res = await api.patch(`/shopify/products/${productId}`, data);
+                return res.data.data;
+            },
+            updateVariant: async (variantId: string, data: { title?: string; price?: string; sku?: string; option1?: string; option2?: string; option3?: string }): Promise<any> => {
+                const res = await api.patch(`/shopify/variants/${variantId}/push`, data);
+                return res.data.data;
+            },
+            createVariant: async (productId: string, data: { title?: string; price?: string; sku?: string; option1?: string; option2?: string; option3?: string }): Promise<any> => {
+                const res = await api.post(`/shopify/products/${productId}/variants`, data);
+                return res.data.data;
+            },
+            deleteVariant: async (variantId: string): Promise<void> => {
+                await api.delete(`/shopify/variants/${variantId}/push`);
+            },
+            setInventory: async (variantId: string, quantity: number, locationId?: number): Promise<any> => {
+                const res = await api.post(`/shopify/variants/${variantId}/inventory`, { quantity, location_id: locationId });
                 return res.data.data;
             },
         },

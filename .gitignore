@@ -12,3 +12,4 @@ postgres_data
 .claude
 logs
 verify_fix.sh
+*.tsbuildinfo

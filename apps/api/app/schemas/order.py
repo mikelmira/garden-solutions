@@ -27,6 +27,7 @@ class OrderItemResponse(BaseModel):
     sku_id: UUID
     quantity_ordered: int
     quantity_manufactured: int
+    quantity_painted: int = 0  # Sprint: Painting stage
     quantity_allocated: int = 0  # Inventory allocated to this item
     quantity_delivered: int
     unit_price_rands: Decimal
@@ -109,6 +110,7 @@ class OrderResponse(BaseModel):
     notes: str | None
     is_ready_for_delivery: bool = False  # Computed: all items fully allocated
     delivery_paused: bool | None = None
+    customer_name: str | None = None  # Shopify shopper name (None for B2B orders)
 
 
 class OrderDetailResponse(OrderResponse):

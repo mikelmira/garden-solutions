@@ -347,6 +347,7 @@ def get_delivery_operations(
             Order.status.in_([
                 OrderStatus.APPROVED,
                 OrderStatus.IN_PRODUCTION,
+                OrderStatus.PAINTING,
                 OrderStatus.READY_FOR_DELIVERY,
                 OrderStatus.OUT_FOR_DELIVERY,
                 OrderStatus.PARTIALLY_DELIVERED,
@@ -530,6 +531,7 @@ def get_system_alerts(
             Order.status.in_([
                 OrderStatus.APPROVED,
                 OrderStatus.IN_PRODUCTION,
+                OrderStatus.PAINTING,
                 OrderStatus.READY_FOR_DELIVERY,
                 OrderStatus.OUT_FOR_DELIVERY,
                 OrderStatus.PARTIALLY_DELIVERED,

@@ -65,6 +65,9 @@ class ShopifyVariant(Base):
     option2 = Column(String(255), nullable=True)
     option3 = Column(String(255), nullable=True)
     inventory_quantity = Column(Integer, nullable=True)
+    # Needed to push inventory updates back to Shopify:
+    inventory_item_id = Column(BigInteger, nullable=True, index=True)
+    inventory_management = Column(String(50), nullable=True)  # "shopify" | null
 
     # Mapping to internal SKU
     sku_id = Column(UUID(as_uuid=True), ForeignKey("skus.id"), nullable=True)

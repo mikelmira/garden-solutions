@@ -38,7 +38,8 @@ class OrderStatus:
     DRAFT = "draft"
     PENDING_APPROVAL = "pending_approval"
     APPROVED = "approved"
-    IN_PRODUCTION = "in_production"
+    IN_PRODUCTION = "in_production"  # Moulding stage
+    PAINTING = "painting"  # Sprint: Painting stage - all items moulded, awaiting paint
     READY_FOR_DELIVERY = "ready_for_delivery"
     OUT_FOR_DELIVERY = "out_for_delivery"
     PARTIALLY_DELIVERED = "partially_delivered"
@@ -46,17 +47,21 @@ class OrderStatus:
     CANCELLED = "cancelled"
 
     ALL_STATUSES = [
-        DRAFT, PENDING_APPROVAL, APPROVED, IN_PRODUCTION,
+        DRAFT, PENDING_APPROVAL, APPROVED, IN_PRODUCTION, PAINTING,
         READY_FOR_DELIVERY, OUT_FOR_DELIVERY, PARTIALLY_DELIVERED,
         COMPLETED, CANCELLED
     ]
 
     # Valid transitions: current_status -> list of allowed next statuses
+    # NOTE: In practice the codebase leaves orders in APPROVED until late in the
+    # lifecycle (no auto-promotion to IN_PRODUCTION). So APPROVED can advance
+    # directly to PAINTING when the day's paint plan picks it up.
     VALID_TRANSITIONS = {
         DRAFT: [PENDING_APPROVAL],
         PENDING_APPROVAL: [APPROVED, CANCELLED],
-        APPROVED: [IN_PRODUCTION, CANCELLED],
-        IN_PRODUCTION: [READY_FOR_DELIVERY],
+        APPROVED: [IN_PRODUCTION, PAINTING, CANCELLED],
+        IN_PRODUCTION: [PAINTING],
+        PAINTING: [READY_FOR_DELIVERY],
         READY_FOR_DELIVERY: [OUT_FOR_DELIVERY],
         OUT_FOR_DELIVERY: [PARTIALLY_DELIVERED, COMPLETED],
         PARTIALLY_DELIVERED: [COMPLETED],
@@ -132,6 +137,16 @@ class Order(Base):
     store = relationship("Store", lazy="joined")
     delivery_team = relationship("DeliveryTeam", lazy="joined")
     items = relationship("OrderItem", back_populates="order", lazy="joined", cascade="all, delete-orphan")
+    # Reverse 1:1 to ShopifyOrder for surfacing the Shopify shopper's name in list views.
+    # viewonly=True because the FK lives on shopify_orders.internal_order_id.
+    shopify_order = relationship(
+        "ShopifyOrder",
+        primaryjoin="Order.id == ShopifyOrder.internal_order_id",
+        foreign_keys="ShopifyOrder.internal_order_id",
+        uselist=False,
+        lazy="joined",
+        viewonly=True,
+    )
 
     @staticmethod
     def default_delivery_date() -> date:

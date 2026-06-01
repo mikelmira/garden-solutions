@@ -15,9 +15,10 @@ class UserRole:
     ADMIN = "admin"
     SALES = "sales"
     MANUFACTURING = "manufacturing"
+    PAINTING = "painting"  # Sprint: Painting stage
     DELIVERY = "delivery"
 
-    ALL_ROLES = [ADMIN, SALES, MANUFACTURING, DELIVERY]
+    ALL_ROLES = [ADMIN, SALES, MANUFACTURING, PAINTING, DELIVERY]
 
     @classmethod
     def is_valid(cls, role: str) -> bool:

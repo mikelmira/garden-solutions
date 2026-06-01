@@ -16,33 +16,93 @@ import {
     Tag,
     BarChart3,
     Store,
-    ShoppingCart,
+    Brush,
+    Mail,
     Menu,
     X,
+    ChevronDown,
+    type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
-const menuItems = [
+type MenuChild = { label: string; href: string; icon: LucideIcon };
+type MenuItem =
+    | { label: string; href: string; icon: LucideIcon; children?: undefined }
+    | { label: string; icon: LucideIcon; children: MenuChild[]; href?: undefined };
+
+// Order reflects the operations workflow: Orders → Manufacture → Deliveries.
+const menuItems: MenuItem[] = [
     { label: "Overview", href: "/admin", icon: LayoutDashboard },
-    { label: "Products", href: "/admin/products", icon: Package },
     { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
-    { label: "Manufacture", href: "/admin/manufacture", icon: Factory },
+    {
+        label: "Manufacture",
+        icon: Factory,
+        children: [
+            { label: "Moulding", href: "/admin/manufacture", icon: Factory },
+            { label: "Painting", href: "/admin/painting", icon: Brush },
+        ],
+    },
+    { label: "Deliveries", href: "/admin/delivery-team", icon: Truck },
+    // Products section — internal page renders tabs for All Products / Shopify / Shopify Products.
+    { label: "Products", href: "/admin/products", icon: Package },
     { label: "Clients", href: "/admin/clients", icon: Users },
+    { label: "Stores", href: "/admin/stores", icon: Store },
     { label: "Price Tiers", href: "/admin/price-tiers", icon: Tag },
     { label: "Teams", href: "/admin/sales-team", icon: Briefcase },
-    { label: "Deliveries", href: "/admin/delivery-team", icon: Truck },
-    { label: "Stores", href: "/admin/stores", icon: Store },
-    { label: "Shopify", href: "/admin/shopify", icon: ShoppingCart },
+    { label: "Automations", href: "/admin/automations", icon: Mail },
     { label: "Intelligence", href: "/admin/analytics", icon: BarChart3 },
     { label: "Account", href: "/admin/account", icon: Settings },
 ];
+
+// Routes that belong to the unified Products section — selecting any of these
+// keeps the "Products" sidebar entry highlighted.
+const PRODUCTS_SECTION_PREFIXES = ["/admin/products", "/admin/shopify", "/admin/shopify-products"];
+
+function isProductsRoute(pathname: string): boolean {
+    return PRODUCTS_SECTION_PREFIXES.some(p => pathname === p || pathname.startsWith(p + "/"));
+}
+
+function isChildActive(pathname: string, href: string): boolean {
+    return pathname === href || pathname.startsWith(href + "/");
+}
 
 export function Sidebar() {
     const pathname = usePathname();
     const { logout } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
+
+    // Track which dropdown parents are expanded. Auto-expand any group whose
+    // child is currently active.
+    const initialExpanded = useMemo<Record<string, boolean>>(() => {
+        const expanded: Record<string, boolean> = {};
+        for (const item of menuItems) {
+            if (item.children) {
+                const hasActive = item.children.some(c => isChildActive(pathname, c.href));
+                if (hasActive) expanded[item.label] = true;
+            }
+        }
+        return expanded;
+    }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+    const [expanded, setExpanded] = useState<Record<string, boolean>>(initialExpanded);
+
+    // If the path changes such that a new group's child becomes active, expand it.
+    useEffect(() => {
+        setExpanded(prev => {
+            const next = { ...prev };
+            let changed = false;
+            for (const item of menuItems) {
+                if (item.children && item.children.some(c => isChildActive(pathname, c.href))) {
+                    if (!next[item.label]) {
+                        next[item.label] = true;
+                        changed = true;
+                    }
+                }
+            }
+            return changed ? next : prev;
+        });
+    }, [pathname]);
 
     // Close mobile menu on route change
     useEffect(() => {
@@ -58,6 +118,89 @@ export function Sidebar() {
         }
         return () => { document.body.style.overflow = ""; };
     }, [mobileOpen]);
+
+    const toggleGroup = (label: string) => {
+        setExpanded(prev => ({ ...prev, [label]: !prev[label] }));
+    };
+
+    const renderLeaf = (item: { label: string; href: string; icon: LucideIcon }) => {
+        // Special case: Products entry stays highlighted across the whole Products section
+        // (which includes /admin/shopify and /admin/shopify-products tabs).
+        const isActive =
+            item.href === "/admin/products"
+                ? isProductsRoute(pathname)
+                : item.href === "/admin"
+                    ? pathname === "/admin"
+                    : pathname === item.href || pathname.startsWith(item.href + "/");
+
+        return (
+            <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+                    isActive
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+            >
+                <item.icon className={cn("h-4 w-4", isActive ? "text-primary-foreground" : "text-muted-foreground")} />
+                {item.label}
+            </Link>
+        );
+    };
+
+    const renderGroup = (item: { label: string; icon: LucideIcon; children: MenuChild[] }) => {
+        const isOpen = !!expanded[item.label];
+        const hasActiveChild = item.children.some(c => isChildActive(pathname, c.href));
+
+        return (
+            <div key={item.label} className="space-y-1">
+                <button
+                    type="button"
+                    onClick={() => toggleGroup(item.label)}
+                    aria-expanded={isOpen}
+                    className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+                        hasActiveChild
+                            ? "text-foreground bg-muted/60"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                >
+                    <item.icon className="h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    <ChevronDown
+                        className={cn(
+                            "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                            isOpen ? "rotate-0" : "-rotate-90"
+                        )}
+                    />
+                </button>
+                {isOpen && (
+                    <div className="ml-3 pl-3 border-l border-border/60 space-y-1">
+                        {item.children.map(child => {
+                            const childActive = isChildActive(pathname, child.href);
+                            return (
+                                <Link
+                                    key={child.href}
+                                    href={child.href}
+                                    className={cn(
+                                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200",
+                                        childActive
+                                            ? "bg-primary text-primary-foreground shadow-sm"
+                                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    )}
+                                >
+                                    <child.icon className={cn("h-4 w-4", childActive ? "text-primary-foreground" : "text-muted-foreground")} />
+                                    {child.label}
+                                </Link>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     const sidebarContent = (
         <>
@@ -86,25 +229,9 @@ export function Sidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-                {menuItems.map((item) => {
-                    const isActive = pathname === item.href ||
-                        (item.href !== "/admin" && pathname.startsWith(item.href));
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className={cn(
-                                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                                isActive
-                                    ? "bg-primary text-primary-foreground shadow-sm"
-                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                        >
-                            <item.icon className={cn("h-4 w-4", isActive ? "text-primary-foreground" : "text-muted-foreground")} />
-                            {item.label}
-                        </Link>
-                    );
-                })}
+                {menuItems.map(item =>
+                    item.children ? renderGroup(item) : renderLeaf(item)
+                )}
             </nav>
 
             {/* Footer */}

@@ -59,10 +59,10 @@ export default function AdminClientsPage() {
                 apiService.clients.list(),
                 apiService.priceTiers.list(),
                 apiService.stores.list(),
-                apiService.shopify.getCustomers().catch(() => []),
+                apiService.admin.shopify.getCustomers().catch(() => []),
             ]);
             setClients(clientsData);
-            setTiers(tiersData.filter(t => t.is_active));
+            setTiers(tiersData.filter((t: { is_active: boolean }) => t.is_active));
             setStores(storesData);
             setCustomers(customersData);
 

@@ -91,6 +91,7 @@ class RoleChecker:
 require_admin = RoleChecker([UserRole.ADMIN])
 require_sales = RoleChecker([UserRole.SALES, UserRole.ADMIN])
 require_manufacturing = RoleChecker([UserRole.MANUFACTURING, UserRole.ADMIN])
+require_painting = RoleChecker([UserRole.PAINTING, UserRole.ADMIN])
 require_delivery = RoleChecker([UserRole.DELIVERY, UserRole.ADMIN])
 require_any_role = RoleChecker(UserRole.ALL_ROLES)
 
@@ -100,4 +101,5 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 AdminUser = Annotated[User, Depends(require_admin)]
 SalesUser = Annotated[User, Depends(require_sales)]
 ManufacturingUser = Annotated[User, Depends(require_manufacturing)]
+PaintingUser = Annotated[User, Depends(require_painting)]
 DeliveryUser = Annotated[User, Depends(require_delivery)]

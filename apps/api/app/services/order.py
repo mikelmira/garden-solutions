@@ -31,13 +31,21 @@ from app.core.logging import log_order_created, log_order_approved, log_order_ca
 def is_order_ready_for_delivery(order: Order) -> bool:
     """
     Check if an order is ready for delivery.
-    Ready = all items have quantity_allocated >= quantity_ordered.
+
+    Ready = for every item, both:
+      - quantity_allocated >= quantity_ordered (inventory reserved)
+      - quantity_painted   >= quantity_ordered (painting stage complete)
+
+    The painting check was added when the painting stage was introduced
+    between moulding and delivery — orders must not ship un-painted.
     """
     if not order.items:
         return False
 
     for item in order.items:
         if item.quantity_allocated < item.quantity_ordered:
+            return False
+        if item.quantity_painted < item.quantity_ordered:
             return False
 
     return True

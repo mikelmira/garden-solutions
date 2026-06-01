@@ -44,6 +44,7 @@ export interface OrderItem {
     quantity_ordered: number;
     unit_price_rands: number;
     quantity_manufactured?: number;
+    quantity_painted?: number; // Sprint: Painting stage
     quantity_allocated?: number; // Inventory allocated to this item
     quantity_delivered: number; // Required for delivery tracking (default 0 from API)
     product_name?: string;
@@ -61,6 +62,7 @@ export interface Order {
     items?: OrderItem[];
     client?: Client;
     client_name?: string;
+    customer_name?: string | null; // Shopify shopper name (null for B2B orders)
     is_ready_for_delivery?: boolean; // Computed: all items fully allocated
     delivery_team_id?: string | null;
     delivery_status?: string | null; // outstanding | delivered | partial | not_delivered
@@ -193,4 +195,128 @@ export interface ManufacturingDay {
 export interface ManufacturingDayCreatePayload {
     plan_date?: string;
     items: { sku_id: string; quantity_planned: number }[];
+}
+
+// ── Painting stage ────────────────────────────────────────────
+export interface PaintingDayItem {
+    id: string;
+    order_item_id: string;
+    quantity_planned: number;
+    quantity_completed: number;
+    remaining: number;
+    order_id?: string | null;
+    client_or_store_label?: string | null;
+    customer_name?: string | null;
+    sku_code?: string | null;
+    product_name?: string | null;
+    size?: string | null;
+    color?: string | null;
+    display_string?: string | null;
+}
+
+export interface PaintingDay {
+    id: string;
+    plan_date: string;
+    created_by: string;
+    created_at: string;
+    items: PaintingDayItem[];
+    total_planned: number;
+    total_completed: number;
+}
+
+export interface PaintingDemandItem {
+    order_item_id: string;
+    order_id: string;
+    order_created_at: string;
+    client_or_store_label: string;
+    customer_name?: string | null;
+    sku_code: string;
+    product_name: string;
+    size?: string | null;
+    color?: string | null;
+    display_string: string;
+    quantity_outstanding: number;
+}
+
+export interface PaintingDemand {
+    items: PaintingDemandItem[];
+    total_items: number;
+    total_units: number;
+}
+
+export interface PaintingPlanCreatePayload {
+    plan_date?: string;
+    items: { order_item_id: string; quantity_planned: number }[];
+}
+
+export interface PaintingTeamMember {
+    id: string;
+    painting_team_id: string;
+    name: string;
+    code: string;
+    phone?: string | null;
+    is_active: boolean;
+}
+
+export interface PaintingTeam {
+    id: string;
+    name: string;
+    code: string;
+    is_active: boolean;
+    members?: PaintingTeamMember[] | null;
+}
+
+// ── Plan email recipients ─────────────────────────────────────
+export type EmailRecipientCategory = "moulding" | "painting" | "both";
+
+export interface EmailRecipient {
+    id: string;
+    email: string;
+    name?: string | null;
+    category: EmailRecipientCategory;
+    is_active: boolean;
+}
+
+// ── Email automations ─────────────────────────────────────────
+export type EmailAutomationPlanType = "moulding" | "painting" | "orders" | "deliveries";
+export type EmailAutomationFrequency = "once" | "daily" | "weekdays" | "weekly";
+
+export interface EmailAutomation {
+    id: string;
+    name: string;
+    plan_type: EmailAutomationPlanType;
+    frequency: EmailAutomationFrequency;
+    send_time?: string | null;  // "HH:MM:SS" (string from API)
+    day_of_week?: number | null;  // 0=Mon..6=Sun
+    send_at?: string | null;  // ISO datetime, only for "once"
+    recipients: string[];
+    is_active: boolean;
+    last_sent_at?: string | null;
+    next_run_at?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface EmailAutomationCreatePayload {
+    name: string;
+    plan_type: EmailAutomationPlanType;
+    frequency: EmailAutomationFrequency;
+    send_time?: string | null;
+    day_of_week?: number | null;
+    send_at?: string | null;
+    recipients: string[];
+}
+
+export interface OnceOffSendPayload {
+    plan_type: EmailAutomationPlanType;
+    recipients: string[];
+    for_date?: string;  // YYYY-MM-DD
+}
+
+export interface OnceOffSendResponse {
+    sent: boolean;
+    plan_type: EmailAutomationPlanType;
+    recipients: string[];
+    for_date: string;
+    note?: string | null;
 }

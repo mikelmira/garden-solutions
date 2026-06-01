@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DeliveryTeam, DeliveryTeamMember, FactoryTeam, FactoryTeamMember, SalesAgent } from "@/types";
+import { DeliveryTeam, DeliveryTeamMember, FactoryTeam, FactoryTeamMember, PaintingTeam, PaintingTeamMember, SalesAgent } from "@/types";
 import { apiService } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Pencil, Trash2, Briefcase, Loader2, Hash, Truck, Users, X } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Briefcase, Loader2, Hash, Truck, Users, X, Brush } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -19,11 +19,12 @@ export default function AdminSalesTeamPage() {
     const [agents, setAgents] = useState<SalesAgent[]>([]);
     const [teams, setTeams] = useState<DeliveryTeam[]>([]);
     const [factoryTeams, setFactoryTeams] = useState<FactoryTeam[]>([]);
+    const [paintingTeams, setPaintingTeams] = useState<PaintingTeam[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [teamDialogOpen, setTeamDialogOpen] = useState(false);
-    const [viewMode, setViewMode] = useState<"all" | "sales" | "delivery" | "factory">("all");
+    const [viewMode, setViewMode] = useState<"all" | "sales" | "delivery" | "factory" | "painting">("all");
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState({ name: "", code: "" });
@@ -48,6 +49,16 @@ export default function AdminSalesTeamPage() {
     const [factoryOriginalMembers, setFactoryOriginalMembers] = useState<FactoryTeamMember[]>([]);
     const [factorySaving, setFactorySaving] = useState(false);
 
+    const [paintingDialogOpen, setPaintingDialogOpen] = useState(false);
+    const [paintingEditingId, setPaintingEditingId] = useState<string | null>(null);
+    const [paintingFormData, setPaintingFormData] = useState<{ name: string; code: string; members: PaintingTeamMember[] }>({
+        name: "",
+        code: "",
+        members: []
+    });
+    const [paintingOriginalMembers, setPaintingOriginalMembers] = useState<PaintingTeamMember[]>([]);
+    const [paintingSaving, setPaintingSaving] = useState(false);
+
     useEffect(() => {
         loadData();
     }, []);
@@ -55,16 +66,18 @@ export default function AdminSalesTeamPage() {
     const loadData = async () => {
         try {
             setLoading(true);
-            const [agentsData, teamsData, factoryTeamsData] = await Promise.all([
+            const [agentsData, teamsData, factoryTeamsData, paintingTeamsData] = await Promise.all([
                 apiService.admin.salesAgents.list(),
                 apiService.admin.deliveryTeams.list(),
-                apiService.admin.factoryTeams.list()
+                apiService.admin.factoryTeams.list(),
+                apiService.admin.paintingTeams.list()
             ]);
             setAgents(agentsData);
             setTeams(teamsData);
             setFactoryTeams(factoryTeamsData);
+            setPaintingTeams(paintingTeamsData);
         } catch (error: any) {
-            toast({ variant: "destructive", title: "Failed to load sales agents", description: error.message });
+            toast({ variant: "destructive", title: "Failed to load teams", description: error.message });
         } finally {
             setLoading(false);
         }
@@ -73,6 +86,7 @@ export default function AdminSalesTeamPage() {
     const filteredAgents = agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase()) || a.code.toLowerCase().includes(search.toLowerCase()));
     const filteredTeams = teams.filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.code.toLowerCase().includes(search.toLowerCase()));
     const filteredFactoryTeams = factoryTeams.filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.code.toLowerCase().includes(search.toLowerCase()));
+    const filteredPaintingTeams = paintingTeams.filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.code.toLowerCase().includes(search.toLowerCase()));
 
     const handleOpen = (agent?: SalesAgent) => {
         if (agent) {
@@ -109,6 +123,19 @@ export default function AdminSalesTeamPage() {
             setFactoryOriginalMembers([]);
         }
         setFactoryDialogOpen(true);
+    };
+
+    const handleOpenPaintingTeam = (team?: PaintingTeam) => {
+        if (team) {
+            setPaintingEditingId(team.id);
+            setPaintingFormData({ name: team.name, code: team.code, members: team.members ? [...team.members] : [] });
+            setPaintingOriginalMembers(team.members ? [...team.members] : []);
+        } else {
+            setPaintingEditingId(null);
+            setPaintingFormData({ name: "", code: "", members: [] });
+            setPaintingOriginalMembers([]);
+        }
+        setPaintingDialogOpen(true);
     };
 
     const handleSave = async () => {
@@ -245,6 +272,63 @@ export default function AdminSalesTeamPage() {
         }
     };
 
+    const handleSavePaintingTeam = async () => {
+        if (!paintingFormData.name || !paintingFormData.code) return;
+
+        try {
+            setPaintingSaving(true);
+            const { members, ...payload } = paintingFormData;
+
+            let teamId = paintingEditingId;
+
+            if (paintingEditingId) {
+                await apiService.admin.paintingTeams.update(paintingEditingId, payload);
+                toast({ title: "Painting Team Updated" });
+            } else {
+                const newTeam = await apiService.admin.paintingTeams.create(payload);
+                teamId = newTeam.id;
+                toast({ title: "Painting Team Created" });
+            }
+
+            if (!teamId) throw new Error("Failed to resolve team ID");
+
+            const currentMembers = members;
+            const removed = paintingOriginalMembers.filter(orig => !currentMembers.find(curr => curr.id === orig.id));
+            for (const m of removed) {
+                await apiService.admin.paintingTeams.removeMember(teamId, m.id);
+            }
+
+            const added = currentMembers.filter(m => m.id.startsWith("temp-"));
+            for (const m of added) {
+                if (m.name.trim() && m.code.trim()) {
+                    await apiService.admin.paintingTeams.addMember(teamId, { name: m.name, code: m.code, phone: m.phone || undefined });
+                }
+            }
+
+            const updated = currentMembers.filter(m => !m.id.startsWith("temp-"));
+            for (const m of updated) {
+                const orig = paintingOriginalMembers.find(o => o.id === m.id);
+                if (orig) {
+                    if (orig.name !== m.name || orig.phone !== m.phone || orig.is_active !== m.is_active || orig.code !== m.code) {
+                        await apiService.admin.paintingTeams.updateMember(teamId, m.id, {
+                            name: m.name,
+                            code: m.code,
+                            phone: m.phone ?? undefined,
+                            is_active: m.is_active
+                        });
+                    }
+                }
+            }
+
+            setPaintingDialogOpen(false);
+            loadData();
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Error saving painting team", description: error.message || "Unknown error" });
+        } finally {
+            setPaintingSaving(false);
+        }
+    };
+
     const handleDelete = async (id: string) => {
         if (confirm("Delete this agent?")) {
             try {
@@ -277,6 +361,18 @@ export default function AdminSalesTeamPage() {
                 loadData();
             } catch (error: any) {
                 toast({ variant: "destructive", title: "Error deleting factory team", description: error.message });
+            }
+        }
+    };
+
+    const handleDeletePaintingTeam = async (id: string) => {
+        if (confirm("Delete this painting team?")) {
+            try {
+                await apiService.admin.paintingTeams.delete(id);
+                toast({ title: "Painting Team Deleted" });
+                loadData();
+            } catch (error: any) {
+                toast({ variant: "destructive", title: "Error deleting painting team", description: error.message });
             }
         }
     };
@@ -324,6 +420,28 @@ export default function AdminSalesTeamPage() {
         setFactoryFormData(prev => ({ ...prev, members: prev.members.filter((_, i) => i !== index) }));
     };
 
+    const addEmptyPaintingMember = () => {
+        const newMember: PaintingTeamMember = {
+            id: `temp-${Date.now()}`,
+            painting_team_id: paintingEditingId || "",
+            name: "",
+            code: "",
+            phone: "",
+            is_active: true
+        };
+        setPaintingFormData(prev => ({ ...prev, members: [...prev.members, newMember] }));
+    };
+
+    const updatePaintingMemberField = (index: number, field: keyof PaintingTeamMember, value: any) => {
+        const newMembers = [...paintingFormData.members];
+        newMembers[index] = { ...newMembers[index], [field]: value };
+        setPaintingFormData(prev => ({ ...prev, members: newMembers }));
+    };
+
+    const removePaintingMember = (index: number) => {
+        setPaintingFormData(prev => ({ ...prev, members: prev.members.filter((_, i) => i !== index) }));
+    };
+
     return (
         <div className="space-y-6">
             <PageHeader
@@ -344,6 +462,11 @@ export default function AdminSalesTeamPage() {
                     {(viewMode === "factory" || viewMode === "all") && (
                         <Button variant="outline" onClick={() => handleOpenFactoryTeam()} className="gap-2">
                             <Plus size={16} /> Add Factory Team
+                        </Button>
+                    )}
+                    {(viewMode === "painting" || viewMode === "all") && (
+                        <Button variant="outline" onClick={() => handleOpenPaintingTeam()} className="gap-2">
+                            <Plus size={16} /> Add Painting Team
                         </Button>
                     )}
                 </div>
@@ -385,6 +508,14 @@ export default function AdminSalesTeamPage() {
                         >
                             Factory Teams
                         </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant={viewMode === "painting" ? "default" : "outline"}
+                            onClick={() => setViewMode("painting")}
+                        >
+                            Painting Teams
+                        </Button>
                     </div>
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -394,7 +525,9 @@ export default function AdminSalesTeamPage() {
                                     ? "Search delivery teams..."
                                     : viewMode === "factory"
                                         ? "Search factory teams..."
-                                        : "Search agents..."
+                                        : viewMode === "painting"
+                                            ? "Search painting teams..."
+                                            : "Search agents..."
                             }
                             className="pl-9 max-w-md"
                             value={search}
@@ -531,6 +664,53 @@ export default function AdminSalesTeamPage() {
                                                             <Pencil size={14} />
                                                         </Button>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteFactoryTeam(team.id)}>
+                                                            <Trash2 size={14} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    <Hash size={14} />
+                                                    <span className="font-mono">{team.code}</span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {(viewMode === "painting" || viewMode === "all") && (
+                        <>
+                            {filteredPaintingTeams.length === 0 ? (
+                                <EmptyState
+                                    icon={Brush}
+                                    title="No painting teams found"
+                                    description="No painting teams match your search. Try adjusting your criteria or add a new team."
+                                />
+                            ) : (
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    {filteredPaintingTeams.map(team => (
+                                        <Card key={team.id} className="group hover:shadow-md transition-shadow">
+                                            <CardContent className="p-5">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-10 w-10 bg-sky-100 dark:bg-sky-900/30 rounded-lg flex items-center justify-center text-sky-600 dark:text-sky-400">
+                                                            <Brush size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="font-semibold text-foreground">{team.name}</h3>
+                                                            <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+                                                                <Users size={12} />
+                                                                <span>{team.members?.length || 0} members</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenPaintingTeam(team)}>
+                                                            <Pencil size={14} />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeletePaintingTeam(team.id)}>
                                                             <Trash2 size={14} />
                                                         </Button>
                                                     </div>
@@ -782,6 +962,107 @@ export default function AdminSalesTeamPage() {
                         <Button onClick={handleSaveFactoryTeam} disabled={factorySaving}>
                             {factorySaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {factoryEditingId ? "Save Changes" : "Create Team"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={paintingDialogOpen} onOpenChange={setPaintingDialogOpen}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-sky-600 dark:text-sky-400">
+                                <Brush size={20} />
+                            </div>
+                            {paintingEditingId ? "Edit Painting Team" : "Add Painting Team"}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {paintingEditingId ? "Update painting team information below." : "Enter team details to create a new painting team."}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium">Name</Label>
+                                <Input
+                                    value={paintingFormData.name}
+                                    onChange={e => setPaintingFormData({ ...paintingFormData, name: e.target.value })}
+                                    placeholder="Team Name"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium">Team Code</Label>
+                                <Input
+                                    value={paintingFormData.code}
+                                    onChange={e => setPaintingFormData({ ...paintingFormData, code: e.target.value })}
+                                    placeholder="Team Code"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <Label className="text-sm font-medium">Team Members</Label>
+                                <Button size="sm" variant="secondary" onClick={addEmptyPaintingMember} type="button">
+                                    <Plus size={14} className="mr-1" /> Add Member
+                                </Button>
+                            </div>
+
+                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                                {paintingFormData.members.length === 0 ? (
+                                    <div className="text-center py-6 border rounded-lg border-dashed text-muted-foreground text-sm">
+                                        No members added yet.
+                                    </div>
+                                ) : (
+                                    paintingFormData.members.map((m, i) => (
+                                        <div key={m.id || i} className="flex gap-2 items-start p-2 rounded-lg border bg-muted/20">
+                                            <div className="grid gap-2 flex-1 sm:grid-cols-3">
+                                                <Input
+                                                    value={m.name}
+                                                    onChange={e => updatePaintingMemberField(i, "name", e.target.value)}
+                                                    placeholder="Name"
+                                                    className="h-8"
+                                                />
+                                                <Input
+                                                    value={m.code}
+                                                    onChange={e => updatePaintingMemberField(i, "code", e.target.value)}
+                                                    placeholder="Member Code"
+                                                    className="h-8"
+                                                />
+                                                <Input
+                                                    value={m.phone || ""}
+                                                    onChange={e => updatePaintingMemberField(i, "phone", e.target.value)}
+                                                    placeholder="Phone (optional)"
+                                                    className="h-8"
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-1 pt-0.5">
+                                                <Switch
+                                                    checked={m.is_active !== false}
+                                                    onCheckedChange={c => updatePaintingMemberField(i, "is_active", c)}
+                                                    className="scale-75"
+                                                    title="Active Status"
+                                                />
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                                    onClick={() => removePaintingMember(i)}
+                                                >
+                                                    <X size={14} />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => setPaintingDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSavePaintingTeam} disabled={paintingSaving}>
+                            {paintingSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {paintingEditingId ? "Save Changes" : "Create Team"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

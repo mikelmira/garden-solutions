@@ -237,6 +237,8 @@ class ShopifyService:
             sv.option2 = v_data.get("option2")
             sv.option3 = v_data.get("option3")
             sv.inventory_quantity = v_data.get("inventory_quantity")
+            sv.inventory_item_id = v_data.get("inventory_item_id")
+            sv.inventory_management = v_data.get("inventory_management")
             sv.last_synced_at = now
             sv.updated_at = now
             # Re-attempt auto-mapping if still unmapped
@@ -254,6 +256,8 @@ class ShopifyService:
                 option2=v_data.get("option2"),
                 option3=v_data.get("option3"),
                 inventory_quantity=v_data.get("inventory_quantity"),
+                inventory_item_id=v_data.get("inventory_item_id"),
+                inventory_management=v_data.get("inventory_management"),
                 mapping_status="unmapped",
                 last_synced_at=now,
             )
