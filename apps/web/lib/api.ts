@@ -397,6 +397,10 @@ export const apiService = {
         delete: async (id: string): Promise<void> => {
             await api.delete(`/orders/${id}`);
         },
+        bulkDelete: async (orderIds: string[]): Promise<{ succeeded_count: number; failed_count: number; succeeded: string[]; failed: { order_id: string; error: string }[] }> => {
+            const res = await api.post("/orders/bulk-delete", { order_ids: orderIds });
+            return res.data.data;
+        },
     },
     orderItems: {
         updateManufactured: async (id: string, quantity: number): Promise<any> => {

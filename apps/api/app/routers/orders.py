@@ -213,7 +213,7 @@ def delete_order(
 ):
     """
     Hard delete an order (Admin only).
-    
+
     This will:
     - Return allocated inventory
     - Create an audit log entry
@@ -222,3 +222,35 @@ def delete_order(
     service = OrderService(db)
     service.delete_order(order_id, current_user)
     return None
+
+
+class BulkDeleteRequest(BaseModel):
+    order_ids: list[UUID]
+
+
+@router.post("/bulk-delete")
+def bulk_delete_orders(
+    data: BulkDeleteRequest,
+    current_user: AdminUser,
+    db: Session = Depends(get_db),
+):
+    """Hard-delete multiple orders. Same per-order semantics as DELETE /{id}.
+
+    Returns a summary of which ones succeeded and which failed so the UI can
+    show partial-success state without aborting on the first error.
+    """
+    service = OrderService(db)
+    succeeded: list[str] = []
+    failed: list[dict] = []
+    for oid in data.order_ids:
+        try:
+            service.delete_order(oid, current_user)
+            succeeded.append(str(oid))
+        except Exception as e:  # noqa: BLE001
+            failed.append({"order_id": str(oid), "error": str(e)[:200]})
+    return DataResponse(data={
+        "succeeded_count": len(succeeded),
+        "failed_count": len(failed),
+        "succeeded": succeeded,
+        "failed": failed,
+    })

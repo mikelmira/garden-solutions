@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Calendar, X, Truck, Package, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Calendar, X, Truck, Package, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 import {
     Table,
     TableBody,
@@ -69,6 +69,11 @@ export default function AdminOrdersPage() {
     // Delete State
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Bulk-select State
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -246,6 +251,60 @@ export default function AdminOrdersPage() {
         }
     };
 
+    const toggleRowSelected = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAllFiltered = () => {
+        setSelectedIds(prev => {
+            const allIds = filteredOrders.map(o => o.id);
+            const allSelected = allIds.every(id => prev.has(id));
+            if (allSelected) {
+                const next = new Set(prev);
+                for (const id of allIds) next.delete(id);
+                return next;
+            }
+            const next = new Set(prev);
+            for (const id of allIds) next.add(id);
+            return next;
+        });
+    };
+
+    const clearSelection = () => setSelectedIds(new Set());
+
+    const handleBulkDelete = async () => {
+        if (selectedIds.size === 0) return;
+        try {
+            setIsBulkDeleting(true);
+            const ids = Array.from(selectedIds);
+            const result = await apiService.orders.bulkDelete(ids);
+            if (result.failed_count === 0) {
+                toast({
+                    title: "Orders deleted",
+                    description: `${result.succeeded_count} order${result.succeeded_count === 1 ? "" : "s"} permanently deleted.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Partial delete",
+                    description: `${result.succeeded_count} deleted, ${result.failed_count} failed. First error: ${result.failed[0]?.error ?? "unknown"}`,
+                });
+            }
+            setBulkDeleteOpen(false);
+            clearSelection();
+            loadData();
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Bulk delete failed", description: error.message });
+        } finally {
+            setIsBulkDeleting(false);
+        }
+    };
+
     // --- Render Helpers ---
     const getStatusBadge = (status: string, isReadyForDelivery?: boolean, isPaused?: boolean) => {
         let variant = "secondary";
@@ -419,9 +478,40 @@ export default function AdminOrdersPage() {
                         />
                     ) : (
                         <div className="overflow-x-auto">
+                        {selectedIds.size > 0 && (
+                            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-2 bg-primary/5 border-b border-primary/20">
+                                <div className="text-sm">
+                                    <span className="font-medium">{selectedIds.size}</span> order{selectedIds.size === 1 ? "" : "s"} selected
+                                    {filteredOrders.length !== selectedIds.size && (
+                                        <button type="button" onClick={toggleSelectAllFiltered} className="ml-3 text-primary hover:underline">
+                                            Select all {filteredOrders.length} on this page
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button size="sm" variant="ghost" onClick={clearSelection}>
+                                        Clear
+                                    </Button>
+                                    <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Delete {selectedIds.size}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                         <Table>
                             <TableHeader className="bg-muted/30">
                                 <TableRow>
+                                    <TableHead className="w-[44px]">
+                                        <input
+                                            type="checkbox"
+                                            aria-label="Select all visible orders"
+                                            className="h-4 w-4 cursor-pointer"
+                                            checked={filteredOrders.length > 0 && filteredOrders.every(o => selectedIds.has(o.id))}
+                                            onChange={toggleSelectAllFiltered}
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                    </TableHead>
                                     <TableHead className="w-[120px]">Status</TableHead>
                                     <TableHead>Client / Store</TableHead>
                                     <TableHead className="w-[110px] hidden sm:table-cell">Products</TableHead>
@@ -437,10 +527,20 @@ export default function AdminOrdersPage() {
                                         key={order.id}
                                         className={cn(
                                             "cursor-pointer transition-colors",
+                                            selectedIds.has(order.id) ? "bg-primary/5" : "",
                                             order.delivery_paused ? "bg-slate-50 hover:bg-slate-100" : "hover:bg-muted/30"
                                         )}
                                         onClick={() => handleOrderClick(order)}
                                     >
+                                        <TableCell onClick={e => e.stopPropagation()} className="w-[44px]">
+                                            <input
+                                                type="checkbox"
+                                                aria-label={`Select order ${order.id.slice(0, 6)}`}
+                                                className="h-4 w-4 cursor-pointer"
+                                                checked={selectedIds.has(order.id)}
+                                                onChange={() => toggleRowSelected(order.id)}
+                                            />
+                                        </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 {getStatusBadge(order.status, order.is_ready_for_delivery, order.delivery_paused)}
@@ -669,6 +769,25 @@ export default function AdminOrdersPage() {
                         <Button variant="destructive" onClick={handleDeleteOrder} disabled={isDeleting}>
                             {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Confirm Delete
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Bulk Delete Confirmation Dialog */}
+            <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete {selectedIds.size} order{selectedIds.size === 1 ? "" : "s"}?</DialogTitle>
+                        <DialogDescription>
+                            This action cannot be undone. All selected orders will be permanently deleted and any allocated inventory returned. Shopify sync history is preserved (just unlinked from the deleted orders).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-3 py-4">
+                        <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={isBulkDeleting}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleBulkDelete} disabled={isBulkDeleting}>
+                            {isBulkDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Delete {selectedIds.size}
                         </Button>
                     </div>
                 </DialogContent>

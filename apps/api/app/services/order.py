@@ -20,6 +20,7 @@ from app.models.user import User, UserRole
 from app.models.delivery_team import DeliveryTeam
 from app.models.sales_agent import SalesAgent
 from app.models.store import Store
+from app.models.shopify import ShopifyOrder
 from app.schemas.order import OrderCreate, OrderStatusUpdate, DeliveryTeamAssign, DeliveryAssignmentUpdate
 from app.services.audit import AuditService
 from app.models.audit_log import AuditAction
@@ -535,6 +536,13 @@ class OrderService:
                 "inventory_returned": dealloc_result["total_returned"]
             },
         )
+
+        # Null any shopify_orders references so the FK constraint doesn't block
+        # the delete. shopify_orders rows are sync history and should NOT be
+        # cascaded away; we only unlink them from the deleted order.
+        self.db.query(ShopifyOrder).filter(
+            ShopifyOrder.internal_order_id == order.id
+        ).update({"internal_order_id": None}, synchronize_session=False)
 
         self.db.delete(order)
         self.db.commit()
