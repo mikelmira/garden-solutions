@@ -53,7 +53,7 @@ def list_orders(
     current_user: CurrentUser,
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(20, ge=1, le=500),
     status: str | None = Query(None),
     client_id: UUID | None = Query(None),
 ):
@@ -239,6 +239,9 @@ def bulk_delete_orders(
     Returns a summary of which ones succeeded and which failed so the UI can
     show partial-success state without aborting on the first error.
     """
+    if len(data.order_ids) > 200:
+        raise ConflictException("Bulk delete is limited to 200 orders per request.")
+
     service = OrderService(db)
     succeeded: list[str] = []
     failed: list[dict] = []
@@ -247,6 +250,11 @@ def bulk_delete_orders(
             service.delete_order(oid, current_user)
             succeeded.append(str(oid))
         except Exception as e:  # noqa: BLE001
+            # Reset the session: a failed flush mid-delete leaves it in
+            # pending-rollback state, which would (a) make every remaining
+            # iteration fail spuriously and (b) let a later commit sweep in
+            # the failed order's partial inventory changes.
+            db.rollback()
             failed.append({"order_id": str(oid), "error": str(e)[:200]})
     return DataResponse(data={
         "succeeded_count": len(succeeded),

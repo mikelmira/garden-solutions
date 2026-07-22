@@ -44,6 +44,7 @@ export default function AdminShopifyProductDetailPage() {
 
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [savingProduct, setSavingProduct] = useState(false);
 
     // Edit buffers
@@ -76,6 +77,7 @@ export default function AdminShopifyProductDetailPage() {
     const load = async () => {
         try {
             setLoading(true);
+            setLoadError(null);
             const data = await apiService.admin.shopify.getProduct(productId);
             setProduct(data);
             setPForm({
@@ -86,7 +88,7 @@ export default function AdminShopifyProductDetailPage() {
             });
             setVariantBuffers({});
         } catch (error: any) {
-            toast({ variant: "destructive", title: "Failed to load product", description: error.message });
+            setLoadError(error.message || "Failed to load product");
         } finally {
             setLoading(false);
         }
@@ -124,19 +126,32 @@ export default function AdminShopifyProductDetailPage() {
         // Drop undefined
         Object.keys(editable).forEach(k => editable[k] === undefined && delete editable[k]);
 
+        const mergeIntoProduct = (updated: Variant) =>
+            setProduct(prev => prev ? { ...prev, variants: prev.variants.map(x => x.id === v.id ? { ...x, ...updated } : x) } : prev);
+
         try {
             setSavingVariantId(v.id);
 
-            let updated = v;
             if (Object.keys(editable).length > 0) {
-                updated = await apiService.admin.shopify.updateVariant(v.id, editable);
+                const updated = await apiService.admin.shopify.updateVariant(v.id, editable);
+                // Reflect the successful field push immediately — if the
+                // follow-up inventory call fails, the UI must not pretend
+                // these fields are still unsaved.
+                mergeIntoProduct(updated);
+                setVariantBuffers(prev => {
+                    const next = { ...prev };
+                    const keep = next[v.id]?.inventory_quantity;
+                    if (keep !== undefined) next[v.id] = { inventory_quantity: keep };
+                    else delete next[v.id];
+                    return next;
+                });
             }
             // Inventory separately
             if (buffer.inventory_quantity !== undefined && buffer.inventory_quantity !== v.inventory_quantity) {
-                updated = await apiService.admin.shopify.setInventory(v.id, Number(buffer.inventory_quantity));
+                const updated = await apiService.admin.shopify.setInventory(v.id, Number(buffer.inventory_quantity));
+                mergeIntoProduct(updated);
             }
 
-            setProduct(prev => prev ? { ...prev, variants: prev.variants.map(x => x.id === v.id ? { ...x, ...updated } : x) } : prev);
             setVariantBuffers(prev => { const next = { ...prev }; delete next[v.id]; return next; });
             toast({ title: "Variant pushed to Shopify" });
         } catch (error: any) {
@@ -174,10 +189,24 @@ export default function AdminShopifyProductDetailPage() {
         }
     };
 
-    if (loading || !product) {
+    if (loading) {
         return (
             <div className="flex h-[40vh] items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    if (loadError || !product) {
+        return (
+            <div className="flex h-[40vh] flex-col items-center justify-center gap-4">
+                <p className="text-muted-foreground">{loadError || "Product not found."}</p>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => router.back()}>
+                        <ArrowLeft className="h-4 w-4 mr-1" /> Back
+                    </Button>
+                    <Button onClick={load}>Retry</Button>
+                </div>
             </div>
         );
     }

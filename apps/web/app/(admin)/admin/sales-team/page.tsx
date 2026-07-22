@@ -64,23 +64,34 @@ export default function AdminSalesTeamPage() {
     }, []);
 
     const loadData = async () => {
-        try {
-            setLoading(true);
-            const [agentsData, teamsData, factoryTeamsData, paintingTeamsData] = await Promise.all([
-                apiService.admin.salesAgents.list(),
-                apiService.admin.deliveryTeams.list(),
-                apiService.admin.factoryTeams.list(),
-                apiService.admin.paintingTeams.list()
-            ]);
-            setAgents(agentsData);
-            setTeams(teamsData);
-            setFactoryTeams(factoryTeamsData);
-            setPaintingTeams(paintingTeamsData);
-        } catch (error: any) {
-            toast({ variant: "destructive", title: "Failed to load teams", description: error.message });
-        } finally {
-            setLoading(false);
+        setLoading(true);
+        // Load each list independently: one failing endpoint shouldn't blank
+        // the sections that loaded fine.
+        const [agentsRes, teamsRes, factoryRes, paintingRes] = await Promise.allSettled([
+            apiService.admin.salesAgents.list(),
+            apiService.admin.deliveryTeams.list(),
+            apiService.admin.factoryTeams.list(),
+            apiService.admin.paintingTeams.list(),
+        ]);
+        if (agentsRes.status === "fulfilled") setAgents(agentsRes.value);
+        if (teamsRes.status === "fulfilled") setTeams(teamsRes.value);
+        if (factoryRes.status === "fulfilled") setFactoryTeams(factoryRes.value);
+        if (paintingRes.status === "fulfilled") setPaintingTeams(paintingRes.value);
+
+        const failures = [
+            ["sales agents", agentsRes],
+            ["delivery teams", teamsRes],
+            ["factory teams", factoryRes],
+            ["painting teams", paintingRes],
+        ].filter(([, r]) => (r as PromiseSettledResult<unknown>).status === "rejected");
+        if (failures.length > 0) {
+            toast({
+                variant: "destructive",
+                title: "Some team lists failed to load",
+                description: failures.map(([label]) => label).join(", "),
+            });
         }
+        setLoading(false);
     };
 
     const filteredAgents = agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase()) || a.code.toLowerCase().includes(search.toLowerCase()));

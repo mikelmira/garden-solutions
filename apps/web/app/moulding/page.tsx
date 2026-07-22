@@ -53,10 +53,22 @@ export default function MouldingPage() {
                 setScreen("list");
             }
         } catch (error: any) {
-            if (!silent) {
-                toast({ variant: "destructive", title: "Invalid Code", description: "Please enter a valid factory code." });
+            // Only forget the saved code when the server actually rejected it.
+            // A network blip or API restart must not sign the factory out.
+            const status = error?.response?.status;
+            const rejected = status === 401 || status === 403;
+            if (rejected) {
+                localStorage.removeItem("garden_moulding_code");
             }
-            localStorage.removeItem("garden_moulding_code");
+            if (!silent) {
+                toast({
+                    variant: "destructive",
+                    title: rejected ? "Invalid Code" : "Connection problem",
+                    description: rejected
+                        ? "Please enter a valid factory code."
+                        : "Could not reach the server. Try again in a moment.",
+                });
+            }
         } finally {
             setLoading(false);
         }

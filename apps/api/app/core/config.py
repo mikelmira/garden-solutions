@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     RESEND_FROM_EMAIL: str = "noreply@gsoperations.co.za"
     RESEND_FROM_NAME: str = "Garden Solutions"
 
+    # Business-local UTC offset in minutes for the email automation scheduler.
+    # Automation times (send_time / send_at / next_run_at) are stored and
+    # compared in business-local wall-clock time, so what admins type in the
+    # UI is what they get. South Africa is UTC+2 year-round (no DST).
+    SCHEDULER_UTC_OFFSET_MINUTES: int = 120
+
     def model_post_init(self, __context):
         if not self.SQLALCHEMY_DATABASE_URI:
             if self.DATABASE_URL:

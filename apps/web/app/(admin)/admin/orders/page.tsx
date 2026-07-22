@@ -111,6 +111,12 @@ export default function AdminOrdersPage() {
         }
     };
 
+    // Changing filters hides rows — drop the selection rather than letting
+    // "Delete N" silently include orders that are no longer on screen.
+    useEffect(() => {
+        setSelectedIds(new Set());
+    }, [statusFilter, dateFilter]);
+
     // --- Computed Data ---
     const filteredOrders = useMemo(() => {
         return orders.filter(o => {
@@ -240,6 +246,14 @@ export default function AdminOrdersPage() {
         try {
             setIsDeleting(true);
             await apiService.orders.delete(selectedOrder.id);
+            // Prune the deleted id from any bulk selection so a later
+            // "Delete N" doesn't report a phantom failure for a dead id.
+            setSelectedIds(prev => {
+                if (!prev.has(selectedOrder.id)) return prev;
+                const next = new Set(prev);
+                next.delete(selectedOrder.id);
+                return next;
+            });
             toast({ title: "Order Deleted", description: "The order has been permanently deleted." });
             setDeleteConfirmOpen(false);
             setSelectedOrder(null);

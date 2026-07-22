@@ -374,7 +374,10 @@ export const apiService = {
     },
     orders: {
         list: async (filters?: { status?: string; page?: number; size?: number }): Promise<Order[]> => {
-            const params = filters ? { ...filters } : {};
+            // Default to the backend max: the admin pages have no pagination
+            // UI, so the old default of 20 silently truncated the list (and
+            // bulk-select could never reach the hidden rows).
+            const params: { status?: string; page?: number; size?: number } = { size: 500, ...(filters || {}) };
             if (params.status) {
                 params.status = mapStatusToApi(params.status);
             }

@@ -62,7 +62,9 @@ class OrderStatus:
         APPROVED: [IN_PRODUCTION, PAINTING, CANCELLED],
         IN_PRODUCTION: [PAINTING],
         PAINTING: [READY_FOR_DELIVERY],
-        READY_FOR_DELIVERY: [OUT_FOR_DELIVERY],
+        # PAINTING is reachable again from READY_FOR_DELIVERY when a painting
+        # completion count is corrected downward (see PaintingDayService).
+        READY_FOR_DELIVERY: [OUT_FOR_DELIVERY, PAINTING],
         OUT_FOR_DELIVERY: [PARTIALLY_DELIVERED, COMPLETED],
         PARTIALLY_DELIVERED: [COMPLETED],
         COMPLETED: [],  # Terminal state

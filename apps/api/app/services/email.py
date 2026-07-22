@@ -19,6 +19,7 @@ import logging
 import threading
 import urllib.request
 import urllib.error
+from datetime import datetime, timedelta
 from typing import Iterable
 
 from app.core.config import get_settings
@@ -26,6 +27,18 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 RESEND_ENDPOINT = "https://api.resend.com/emails"
+
+
+def business_now() -> datetime:
+    """Current wall-clock time in the business timezone, as a naive datetime.
+
+    All email-automation times (send_time / send_at / next_run_at /
+    last_sent_at) are stored in business-local time so what admins type in
+    the UI is what they get. Offset configured via SCHEDULER_UTC_OFFSET_MINUTES
+    (South Africa is UTC+2 year-round, no DST, so a fixed offset is safe).
+    """
+    offset = timedelta(minutes=get_settings().SCHEDULER_UTC_OFFSET_MINUTES)
+    return (datetime.utcnow() + offset).replace(microsecond=0)
 
 
 def send_email_async(

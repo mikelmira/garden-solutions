@@ -23,7 +23,7 @@ from app.models.manufacturing_day import ManufacturingDay
 from app.models.painting_day import PaintingDay
 from app.models.order import Order, OrderStatus
 from app.models.shopify import ShopifyOrder
-from app.services.email import send_email_async
+from app.services.email import business_now, send_email_async
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ def send_painting_plan_email(db: Session, plan: PaintingDay) -> bool:
 # Orders summary email — current open (non-terminal) orders
 # ----------------------------------------------------------------------
 def _render_orders_summary(db: Session, for_date: date_cls | None = None) -> tuple[str, str]:
-    target_date = for_date or date_cls.today()
+    target_date = for_date or business_now().date()
     open_statuses = [
         OrderStatus.APPROVED,
         OrderStatus.IN_PRODUCTION,
@@ -295,7 +295,7 @@ def _render_orders_summary(db: Session, for_date: date_cls | None = None) -> tup
 # Delivery roster email — orders out for delivery today
 # ----------------------------------------------------------------------
 def _render_deliveries_summary(db: Session, for_date: date_cls | None = None) -> tuple[str, str]:
-    target_date = for_date or date_cls.today()
+    target_date = for_date or business_now().date()
 
     # "Today's deliveries" = orders with delivery_date == target_date that are
     # plausibly deliverable (allocated/painted/ready/out/partial).
@@ -381,7 +381,7 @@ def render_for_today(db: Session, plan_type: str, for_date: date_cls | None = No
     Returns None if there's no plan for that date (caller decides whether to
     send an empty-state email or skip entirely).
     """
-    target_date = for_date or date_cls.today()
+    target_date = for_date or business_now().date()
     if plan_type == "moulding":
         plan = (
             db.query(ManufacturingDay)

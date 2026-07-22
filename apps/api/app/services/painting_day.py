@@ -17,7 +17,8 @@ Auto-advance:
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, lazyload
 
 from app.models.audit_log import AuditAction
 from app.models.order import Order, OrderStatus
@@ -50,7 +51,19 @@ class PaintingDayService:
         """
         Compute outstanding paint demand per order_item.
 
-        Outstanding = quantity_ordered - quantity_painted - planned_today
+        Outstanding = quantity_ordered - quantity_painted - open_planned_today
+
+        where open_planned_today counts only the UNCOMPLETED portion of
+        today's plan rows (quantity_planned - quantity_completed). Completed
+        units are already reflected in quantity_painted — counting the full
+        planned amount would double-subtract them, making residual demand
+        vanish as painters record progress.
+
+        Demand is deliberately based on quantity_ordered, not
+        quantity_manufactured: this codebase redistributes
+        quantity_manufactured from each day's moulding plan, so it is not a
+        reliable cumulative count. The painting plan is a work list; the
+        painting team paints what physically exists.
 
         Includes orders in APPROVED, IN_PRODUCTION, or PAINTING. The codebase
         leaves most live orders in APPROVED throughout the lifecycle — orders
@@ -59,15 +72,8 @@ class PaintingDayService:
         """
         target_date = plan_date or date.today()
 
-        # planned_today map: order_item_id -> sum of quantity_planned across
-        # today's painting plan items (so we don't double-count).
         plan = self.get_plan_by_date(target_date)
-        planned_today: dict[UUID, int] = {}
-        if plan:
-            for item in plan.items:
-                planned_today[item.order_item_id] = (
-                    planned_today.get(item.order_item_id, 0) + item.quantity_planned
-                )
+        planned_today = self._open_planned_map(plan)
 
         orders = (
             self.db.query(Order)
@@ -148,14 +154,32 @@ class PaintingDayService:
     # ------------------------------------------------------------------
     # Plan create / add items
     # ------------------------------------------------------------------
+    # Only orders in these states may receive painting work. Cancelled,
+    # draft, unapproved, and completed orders are rejected at plan time.
+    PLANNABLE_ORDER_STATUSES = (
+        OrderStatus.APPROVED,
+        OrderStatus.IN_PRODUCTION,
+        OrderStatus.PAINTING,
+    )
+
+    @staticmethod
+    def _open_planned_map(plan: PaintingDay | None) -> dict[UUID, int]:
+        """order_item_id -> uncompleted planned units on the given plan.
+
+        Uses (quantity_planned - quantity_completed): completed units are
+        already reflected in order_items.quantity_painted, so counting the
+        full planned amount would double-subtract them from demand/capacity.
+        """
+        open_map: dict[UUID, int] = {}
+        if plan:
+            for item in plan.items:
+                open_units = max(0, item.quantity_planned - item.quantity_completed)
+                open_map[item.order_item_id] = open_map.get(item.order_item_id, 0) + open_units
+        return open_map
+
     def _validate_items(self, items: list[dict], existing_plan: PaintingDay | None) -> None:
-        # Capacity per order_item = quantity_ordered - quantity_painted - already_planned_today
-        already_planned_map: dict[UUID, int] = {}
-        if existing_plan:
-            for it in existing_plan.items:
-                already_planned_map[it.order_item_id] = (
-                    already_planned_map.get(it.order_item_id, 0) + it.quantity_planned
-                )
+        # Capacity per order_item = quantity_ordered - quantity_painted - open_planned_today
+        already_planned_map = self._open_planned_map(existing_plan)
 
         order_item_ids = [it["order_item_id"] for it in items]
         rows = (
@@ -165,21 +189,33 @@ class PaintingDayService:
         )
         by_id = {r.id: r for r in rows}
 
+        # Aggregate requested quantities per order_item first so duplicate
+        # rows in one payload can't each pass validation in isolation.
+        requested: dict[UUID, int] = {}
         for it in items:
             qty = it["quantity_planned"]
             if qty <= 0:
                 raise ConflictException("quantity_planned must be > 0")
-            oi = by_id.get(it["order_item_id"])
+            requested[it["order_item_id"]] = requested.get(it["order_item_id"], 0) + qty
+
+        for oi_id, total_qty in requested.items():
+            oi = by_id.get(oi_id)
             if not oi:
-                raise NotFoundException(f"order_item {it['order_item_id']} not found")
+                raise NotFoundException(f"order_item {oi_id} not found")
+            order = oi.order
+            if not order or order.status not in self.PLANNABLE_ORDER_STATUSES:
+                status = order.status if order else "missing"
+                raise ConflictException(
+                    f"Cannot plan painting for order_item {oi_id}: its order is {status}"
+                )
             capacity = (
                 oi.quantity_ordered
                 - oi.quantity_painted
                 - already_planned_map.get(oi.id, 0)
             )
-            if qty > capacity:
+            if total_qty > capacity:
                 raise ConflictException(
-                    f"Cannot plan {qty} for order_item {oi.id}: only {capacity} available to paint"
+                    f"Cannot plan {total_qty} for order_item {oi_id}: only {max(0, capacity)} available to paint"
                 )
 
     def create_plan(
@@ -197,7 +233,13 @@ class PaintingDayService:
 
         plan = PaintingDay(plan_date=target_date, created_by=created_by)
         self.db.add(plan)
-        self.db.flush()
+        try:
+            # The unique index on plan_date makes the earlier existence check
+            # race-safe: a concurrent create loses here, not with a 500.
+            self.db.flush()
+        except IntegrityError:
+            self.db.rollback()
+            raise ConflictException(f"Painting plan for {target_date} already exists")
 
         touched_order_ids: set[UUID] = set()
         for it in items:
@@ -280,9 +322,17 @@ class PaintingDayService:
         quantity_completed: int,
         performed_by: UUID | None,
     ) -> PaintingDayItem:
+        # Row locks: the painter portal and the admin page can PATCH the same
+        # item concurrently; without locks both read stale counts and one
+        # update is silently lost, desyncing quantity_painted from the sum of
+        # plan-item completions. lazyload("*") is required with FOR UPDATE:
+        # the models' lazy="joined" relationships would otherwise wrap the
+        # query in LEFT OUTER JOINs, which Postgres refuses to lock.
         item = (
             self.db.query(PaintingDayItem)
+            .options(lazyload("*"))
             .filter(PaintingDayItem.id == item_id)
+            .with_for_update()
             .first()
         )
         if not item:
@@ -305,14 +355,23 @@ class PaintingDayService:
         # Propagate to the order_item.quantity_painted (cap at quantity_ordered).
         oi = (
             self.db.query(OrderItem)
+            .options(lazyload("*"))
             .filter(OrderItem.id == item.order_item_id)
+            .with_for_update()
             .first()
         )
         if oi:
             new_painted = max(0, min(oi.quantity_ordered, oi.quantity_painted + delta))
             oi.quantity_painted = new_painted
             self.db.flush()
-            self._maybe_advance_to_ready_for_delivery(oi.order_id, performed_by=performed_by)
+            if delta > 0:
+                self._maybe_advance_to_ready_for_delivery(oi.order_id, performed_by=performed_by)
+            else:
+                # A downward correction can invalidate READY_FOR_DELIVERY.
+                # Without demotion the order vanishes from BOTH queues:
+                # painting demand excludes READY orders and the delivery queue
+                # excludes not-fully-painted ones.
+                self._maybe_demote_to_painting(oi.order_id, performed_by=performed_by)
 
         self.audit_service.log(
             action=AuditAction.UPDATE,
@@ -376,6 +435,31 @@ class PaintingDayService:
             performed_by=performed_by,
             payload={
                 "status": {"old": OrderStatus.PAINTING, "new": OrderStatus.READY_FOR_DELIVERY}
+            },
+        )
+
+    def _maybe_demote_to_painting(self, order_id: UUID, performed_by: UUID | None) -> None:
+        """If order is READY_FOR_DELIVERY but no longer fully painted, move it
+        back to PAINTING so its remaining units reappear in the paint queue."""
+        order = self.db.query(Order).filter(Order.id == order_id).first()
+        if not order or order.status != OrderStatus.READY_FOR_DELIVERY:
+            return
+        if not order.items:
+            return
+        still_fully_painted = all(
+            oi.quantity_painted >= oi.quantity_ordered for oi in order.items
+        )
+        if still_fully_painted:
+            return
+        order.status = OrderStatus.PAINTING
+        self.audit_service.log(
+            action=AuditAction.UPDATE,
+            entity_type="order",
+            entity_id=order.id,
+            performed_by=performed_by,
+            payload={
+                "status": {"old": OrderStatus.READY_FOR_DELIVERY, "new": OrderStatus.PAINTING},
+                "reason": "painting completion corrected downward",
             },
         )
 

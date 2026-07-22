@@ -48,27 +48,25 @@ export default function AdminPaintingPage() {
     };
 
     const handleSelectAll = () => {
+        // Only the rows the user can actually see (items already on today's
+        // plan are hidden from the list and must not be re-selected).
         const next: Record<string, number> = {};
-        outstandingItems.forEach(it => { next[it.order_item_id] = it.quantity_outstanding; });
+        remainingOutstandingItems.forEach(it => { next[it.order_item_id] = it.quantity_outstanding; });
         setPlanInput(next);
     };
 
     const handleClear = () => setPlanInput({});
 
-    const totalPlanned = useMemo(
-        () => Object.values(planInput).reduce((s, q) => s + (q || 0), 0),
-        [planInput]
-    );
-
-    const totalOutstanding = useMemo(
-        () => outstandingItems.reduce((s, it) => s + it.quantity_outstanding, 0),
-        [outstandingItems]
-    );
+    // Effective quantity per row: what the input displays and what every
+    // action uses. Untouched rows default to the full outstanding quantity;
+    // a typed 0 excludes the row.
+    const effectiveQty = (it: PaintingDemandItem): number =>
+        planInput[it.order_item_id] ?? it.quantity_outstanding;
 
     const handleCreatePlan = async () => {
-        const items = outstandingItems
-            .filter(it => (planInput[it.order_item_id] || 0) > 0)
-            .map(it => ({ order_item_id: it.order_item_id, quantity_planned: planInput[it.order_item_id] }));
+        const items = remainingOutstandingItems
+            .map(it => ({ order_item_id: it.order_item_id, quantity_planned: effectiveQty(it) }))
+            .filter(it => it.quantity_planned > 0);
 
         if (items.length === 0) {
             toast({ variant: "destructive", title: "No items selected", description: "Enter quantities to include in today's plan." });
@@ -89,7 +87,7 @@ export default function AdminPaintingPage() {
     };
 
     const handleAddOne = async (it: PaintingDemandItem) => {
-        const qty = planInput[it.order_item_id] || it.quantity_outstanding;
+        const qty = effectiveQty(it);
         if (qty <= 0) {
             toast({ variant: "destructive", title: "Invalid quantity", description: "Enter a quantity greater than 0." });
             return;
@@ -113,10 +111,16 @@ export default function AdminPaintingPage() {
     const handleAddAllOutstanding = async () => {
         const remaining = remainingOutstandingItems;
         if (remaining.length === 0) return;
-        const items = remaining.map(it => ({
-            order_item_id: it.order_item_id,
-            quantity_planned: planInput[it.order_item_id] || it.quantity_outstanding,
-        }));
+        const items = remaining
+            .map(it => ({
+                order_item_id: it.order_item_id,
+                quantity_planned: effectiveQty(it),
+            }))
+            .filter(it => it.quantity_planned > 0);
+        if (items.length === 0) {
+            toast({ variant: "destructive", title: "Nothing to add", description: "All visible items have quantity 0." });
+            return;
+        }
         try {
             setSubmitting(true);
             const plan = await apiService.painting.addItemsToPlan({ items });
@@ -137,6 +141,19 @@ export default function AdminPaintingPage() {
         const planned = new Set(todayPlan.items.map(i => i.order_item_id));
         return outstandingItems.filter(it => !planned.has(it.order_item_id));
     }, [outstandingItems, todayPlan]);
+
+    // Header total must match the visible list, not the full demand set.
+    const totalOutstanding = useMemo(
+        () => remainingOutstandingItems.reduce((s, it) => s + it.quantity_outstanding, 0),
+        [remainingOutstandingItems]
+    );
+
+    // Sum of effective quantities over visible rows — drives the action bar.
+    const totalPlanned = useMemo(
+        () => remainingOutstandingItems.reduce((s, it) => s + effectiveQty(it), 0),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [remainingOutstandingItems, planInput]
+    );
 
     const planProgress = todayPlan && todayPlan.total_planned > 0
         ? (todayPlan.total_completed / todayPlan.total_planned) * 100
@@ -243,7 +260,7 @@ export default function AdminPaintingPage() {
                     ) : (
                         <div className="space-y-2">
                             {remainingOutstandingItems.map(it => {
-                                const planned = planInput[it.order_item_id] || 0;
+                                const planned = effectiveQty(it);
                                 return (
                                     <div key={it.order_item_id} className="flex items-center justify-between gap-3 border rounded-md px-3 py-2">
                                         <div className="min-w-0 flex-1">

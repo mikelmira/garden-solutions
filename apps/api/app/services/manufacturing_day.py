@@ -41,16 +41,23 @@ class ManufacturingDayService:
 
     def get_outstanding_demand(self) -> dict:
         """
-        Compute outstanding demand per SKU from approved orders.
+        Compute outstanding demand per SKU from open orders.
 
         Outstanding for an item = quantity_ordered - quantity_allocated
 
+        Includes APPROVED, IN_PRODUCTION, and PAINTING orders: a partial
+        painting plan advances an order to PAINTING, but its remaining
+        un-moulded items must stay visible in the moulding queue.
+
         Returns aggregated demand with per-order breakdown.
         """
-        # Get all approved orders with their items
         orders = (
             self.db.query(Order)
-            .filter(Order.status == OrderStatus.APPROVED)
+            .filter(
+                Order.status.in_(
+                    [OrderStatus.APPROVED, OrderStatus.IN_PRODUCTION, OrderStatus.PAINTING]
+                )
+            )
             .order_by(Order.created_at.asc())
             .all()
         )
@@ -397,18 +404,21 @@ class ManufacturingDayService:
 
     def _update_order_items_manufactured(self, sku_id: UUID, total_completed: int) -> None:
         """
-        Distribute manufactured quantity across approved order items for this SKU (FIFO).
+        Distribute manufactured quantity across open order items for this SKU (FIFO).
 
         Uses the same FIFO order as inventory allocation: oldest orders first.
         Each order item gets min(quantity_ordered, remaining_completed) as quantity_manufactured.
+        Includes PAINTING/IN_PRODUCTION orders so moulding completion still lands on
+        orders that a partial paint plan has already advanced past APPROVED.
         """
-        # Get all approved order items for this SKU, oldest order first
         order_items = (
             self.db.query(OrderItem)
             .join(Order)
             .filter(
                 OrderItem.sku_id == sku_id,
-                Order.status == OrderStatus.APPROVED,
+                Order.status.in_(
+                    [OrderStatus.APPROVED, OrderStatus.IN_PRODUCTION, OrderStatus.PAINTING]
+                ),
             )
             .order_by(Order.created_at.asc(), OrderItem.created_at.asc())
             .all()

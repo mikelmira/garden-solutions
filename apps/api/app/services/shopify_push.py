@@ -48,6 +48,10 @@ _CACHED_LOCATION_ID: int | None = None
 class ShopifyPushError(Exception):
     """Raised when Shopify rejects a write or the request errors out."""
 
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
 
 def _shopify_url(path: str) -> str:
     settings = get_settings()
@@ -109,13 +113,14 @@ def _shopify_request(method: str, path: str, body: dict | None = None) -> Any:
             err = ""
         logger.error("Shopify %s %s failed status=%s body=%s", method, path, e.code, err[:1000])
         if e.code == 429:
-            raise ShopifyPushError("Shopify rate limit hit — try again in a few seconds") from e
+            raise ShopifyPushError("Shopify rate limit hit — try again in a few seconds", status_code=429) from e
         if e.code == 401:
-            raise ShopifyPushError("Shopify access token rejected (401). Check SHOPIFY_ACCESS_TOKEN.") from e
+            raise ShopifyPushError("Shopify access token rejected (401). Check SHOPIFY_ACCESS_TOKEN.", status_code=401) from e
         if e.code == 404:
-            raise ShopifyPushError(f"Shopify resource not found: {path}") from e
+            raise ShopifyPushError(f"Shopify resource not found: {path}", status_code=404) from e
         raise ShopifyPushError(
-            f"Shopify {method} {path} failed ({e.code}): {_humanize_shopify_error(e.code, err)}"
+            f"Shopify {method} {path} failed ({e.code}): {_humanize_shopify_error(e.code, err)}",
+            status_code=e.code,
         ) from e
     except Exception as e:  # noqa: BLE001
         logger.error("Shopify %s %s error: %s", method, path, e)
@@ -141,6 +146,8 @@ class ShopifyPushService:
             raise ShopifyPushError("No Shopify locations available")
         active = [loc for loc in locations if loc.get("active")]
         chosen = active[0] if active else locations[0]
+        if not chosen.get("id"):
+            raise ShopifyPushError("Shopify returned a location without an id")
         _CACHED_LOCATION_ID = int(chosen["id"])
         return _CACHED_LOCATION_ID
 
@@ -312,7 +319,15 @@ class ShopifyPushService:
             f"/products/{product.shopify_product_id}/variants.json",
             {"variant": body},
         )
-        returned = payload.get("variant", {})
+        returned = payload.get("variant") or {}
+        if not returned.get("id"):
+            # The POST succeeded on Shopify's side but the response is not in
+            # the expected shape — the variant likely exists remotely with no
+            # local mirror. Surface as 502 with a recovery hint, not a 500.
+            raise ShopifyPushError(
+                "Shopify created the variant but returned an unexpected response. "
+                "Run a product sync to reconcile."
+            )
         new = ShopifyVariant(
             shopify_variant_id=returned["id"],
             shopify_product_id=product.shopify_product_id,
@@ -329,6 +344,9 @@ class ShopifyPushService:
             mapping_status="unmapped",
         )
         self.db.add(new)
+        # Flush first: the UUID default fires at INSERT time, so without this
+        # the audit row would be written with entity_id=NULL.
+        self.db.flush()
         self.audit.log(
             action=AuditAction.CREATE,
             entity_type="shopify_variant",
@@ -357,10 +375,16 @@ class ShopifyPushService:
                 "Cannot delete the only variant of a product. Add another variant first, or archive the product instead."
             )
 
-        _shopify_request(
-            "DELETE",
-            f"/products/{variant.shopify_product_id}/variants/{variant.shopify_variant_id}.json",
-        )
+        try:
+            _shopify_request(
+                "DELETE",
+                f"/products/{variant.shopify_product_id}/variants/{variant.shopify_variant_id}.json",
+            )
+        except ShopifyPushError as e:
+            # Already gone on Shopify (stale local mirror) — treat the delete
+            # as idempotent so the local orphan row can still be cleaned up.
+            if e.status_code != 404:
+                raise
         self.audit.log(
             action=AuditAction.DELETE,
             entity_type="shopify_variant",
@@ -392,15 +416,24 @@ class ShopifyPushService:
 
         loc = location_id or self.get_primary_location_id()
 
-        _shopify_request(
-            "POST",
-            "/inventory_levels/set.json",
-            {
-                "location_id": loc,
-                "inventory_item_id": variant.inventory_item_id,
-                "available": int(quantity),
-            },
-        )
+        try:
+            _shopify_request(
+                "POST",
+                "/inventory_levels/set.json",
+                {
+                    "location_id": loc,
+                    "inventory_item_id": variant.inventory_item_id,
+                    "available": int(quantity),
+                },
+            )
+        except ShopifyPushError:
+            # The cached location may be stale (deactivated/deleted on
+            # Shopify). Drop the cache so the next attempt re-resolves it
+            # instead of failing forever until a process restart.
+            global _CACHED_LOCATION_ID
+            if location_id is None:
+                _CACHED_LOCATION_ID = None
+            raise
         variant.inventory_quantity = int(quantity)
         self.audit.log(
             action=AuditAction.UPDATE,

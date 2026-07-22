@@ -14,13 +14,10 @@ from __future__ import annotations
 
 import logging
 import threading
-import time as time_module
-from datetime import datetime, date as date_cls, time as time_cls, timedelta, timezone
-from typing import Iterable
+from datetime import datetime, date as date_cls, time as time_cls, timedelta
 from uuid import UUID
 
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import attributes as sa_attrs
 
 from app.core.database import SessionLocal
 from app.core.exceptions import ConflictException, NotFoundException
@@ -32,7 +29,7 @@ from app.models.email_automation import (
 )
 from app.services.audit import AuditService
 from app.services.plan_emails import render_for_today
-from app.services.email import send_email_async
+from app.services.email import business_now, send_email_async
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +49,9 @@ def compute_next_run_at(
     """
     Compute the next datetime at which the automation should fire.
 
-    All datetimes are treated as naive-UTC (the existing codebase uses
-    datetime.utcnow() naive for stored timestamps; matching that convention).
+    All datetimes are naive business-local time (see business_now()).
     """
-    now = (now or datetime.utcnow()).replace(microsecond=0)
+    now = (now or business_now()).replace(microsecond=0)
 
     if frequency == EmailAutomationFrequency.ONCE:
         if not send_at:
@@ -115,6 +111,7 @@ class EmailAutomationService:
         day_of_week: int | None,
         send_at: datetime | None,
         recipients: list[str],
+        require_future_send_at: bool = False,
     ) -> None:
         if not EmailAutomationPlanType.is_valid(plan_type):
             raise ConflictException(
@@ -133,6 +130,12 @@ class EmailAutomationService:
         if frequency == EmailAutomationFrequency.ONCE:
             if not send_at:
                 raise ConflictException("send_at is required for one-off automations.")
+            # A past send_at would fire within 60s of saving — almost always a
+            # typo'd date. Use the once-off "Send now" tab for immediate sends.
+            if require_future_send_at and send_at <= business_now():
+                raise ConflictException(
+                    "send_at is in the past. Pick a future date/time, or use Send Once-off for an immediate send."
+                )
         else:
             if not send_time:
                 raise ConflictException(
@@ -173,6 +176,7 @@ class EmailAutomationService:
             day_of_week=day_of_week,
             send_at=send_at,
             recipients=recipients,
+            require_future_send_at=True,
         )
         row = EmailAutomation(
             name=name.strip() or "(unnamed)",
@@ -209,35 +213,46 @@ class EmailAutomationService:
         self,
         automation_id: UUID,
         *,
-        name: str | None = None,
-        plan_type: str | None = None,
-        frequency: str | None = None,
-        send_time: time_cls | None = None,
-        day_of_week: int | None = None,
-        send_at: datetime | None = None,
-        recipients: list[str] | None = None,
-        is_active: bool | None = None,
+        patch: dict,
         performed_by: UUID | None,
     ) -> EmailAutomation:
+        """Apply a partial update.
+
+        `patch` contains only the fields the client actually sent
+        (router builds it with model_dump(exclude_unset=True)), so an
+        explicit null clears a field rather than being ignored.
+        """
         row = self.get(automation_id)
 
-        # Apply patches
-        if name is not None:
-            row.name = name.strip() or "(unnamed)"
-        if plan_type is not None:
-            row.plan_type = plan_type
-        if frequency is not None:
-            row.frequency = frequency
-        if send_time is not None or frequency is not None:
-            row.send_time = send_time if send_time is not None else row.send_time
-        if day_of_week is not None or frequency is not None:
-            row.day_of_week = day_of_week if day_of_week is not None else row.day_of_week
-        if send_at is not None or frequency is not None:
-            row.send_at = send_at if send_at is not None else row.send_at
-        if recipients is not None:
-            row.recipients = list(recipients)
-        if is_active is not None:
-            row.is_active = is_active
+        old_frequency = row.frequency
+        old_send_at = row.send_at
+
+        if "name" in patch:
+            row.name = (patch["name"] or "").strip() or "(unnamed)"
+        if "plan_type" in patch:
+            row.plan_type = patch["plan_type"]
+        if "frequency" in patch:
+            row.frequency = patch["frequency"]
+        if "send_time" in patch:
+            row.send_time = patch["send_time"]
+        if "day_of_week" in patch:
+            row.day_of_week = patch["day_of_week"]
+        if "send_at" in patch:
+            row.send_at = patch["send_at"]
+        if "recipients" in patch:
+            row.recipients = [str(r) for r in (patch["recipients"] or [])]
+        if "is_active" in patch:
+            row.is_active = patch["is_active"]
+
+        # Re-arm a one-off when it gets a NEW moment to fire at: either the
+        # frequency just changed to 'once', or its send_at changed. Without
+        # this, a stale last_sent_at (from a previous recurring life, or a
+        # manual "Send now") permanently disables the automation.
+        if row.frequency == EmailAutomationFrequency.ONCE:
+            frequency_changed = "frequency" in patch and old_frequency != row.frequency
+            send_at_changed = "send_at" in patch and old_send_at != row.send_at
+            if frequency_changed or send_at_changed:
+                row.last_sent_at = None
 
         self._validate_payload(
             plan_type=row.plan_type,
@@ -246,9 +261,14 @@ class EmailAutomationService:
             day_of_week=row.day_of_week,
             send_at=row.send_at,
             recipients=list(row.recipients or []),
+            require_future_send_at=(
+                row.frequency == EmailAutomationFrequency.ONCE
+                and row.last_sent_at is None
+                and ("send_at" in patch or "frequency" in patch)
+            ),
         )
 
-        # Recompute next_run_at — never run a one-off that's already fired.
+        # Recompute next_run_at — a one-off that has already fired stays done.
         row.next_run_at = compute_next_run_at(
             frequency=row.frequency,
             send_time=row.send_time,
@@ -295,15 +315,17 @@ class EmailAutomationService:
 def _fire_automation_row(db: Session, row: EmailAutomation, *, advance_schedule: bool) -> None:
     """Render and dispatch one automation. Internal helper used by both the
     manual-run path and the scheduler loop. Caller is responsible for the
-    DB commit."""
+    DB commit.
+
+    last_sent_at means "we attempted this run" (dispatch is fire-and-forget) —
+    it advances even when rendering fails. Without that, a failed 'once'
+    automation would stay due forever and retry every scheduler tick.
+    """
     try:
         rendered = render_for_today(db, row.plan_type)
         if rendered:
             subject, html = rendered
             send_email_async(to=list(row.recipients or []), subject=subject, html=html)
-            row.last_sent_at = datetime.utcnow()
-            # JSONB doesn't get marked as dirty on attribute mutation; force it.
-            sa_attrs.flag_modified(row, "recipients")
             logger.info(
                 "Automation %s (%s) dispatched to %d recipients",
                 row.id,
@@ -314,6 +336,8 @@ def _fire_automation_row(db: Session, row: EmailAutomation, *, advance_schedule:
             logger.warning("Automation %s: render_for_today returned None", row.id)
     except Exception as e:  # noqa: BLE001
         logger.error("Automation %s firing failed: %s", row.id, e)
+    finally:
+        row.last_sent_at = business_now()
 
     if advance_schedule:
         row.next_run_at = compute_next_run_at(
@@ -326,8 +350,14 @@ def _fire_automation_row(db: Session, row: EmailAutomation, *, advance_schedule:
 
 
 def fire_due_automations(now: datetime | None = None) -> int:
-    """Single tick of the scheduler. Returns the number of automations fired."""
-    now = now or datetime.utcnow()
+    """Single tick of the scheduler. Returns the number of automations fired.
+
+    Each row commits independently: one row's failure must not roll back the
+    schedule advance of rows that already dispatched their email (that would
+    make them re-send on the next tick), nor poison the session for the rest
+    of the batch.
+    """
+    now = now or business_now()
     db = SessionLocal()
     fired = 0
     try:
@@ -341,10 +371,13 @@ def fire_due_automations(now: datetime | None = None) -> int:
             .all()
         )
         for row in due:
-            _fire_automation_row(db, row, advance_schedule=True)
-            fired += 1
-        if fired:
-            db.commit()
+            try:
+                _fire_automation_row(db, row, advance_schedule=True)
+                db.commit()
+                fired += 1
+            except Exception as e:  # noqa: BLE001
+                db.rollback()
+                logger.error("Automation %s tick failed: %s", row.id, e)
         return fired
     except Exception as e:  # noqa: BLE001
         db.rollback()

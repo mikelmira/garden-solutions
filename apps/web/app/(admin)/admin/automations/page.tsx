@@ -60,14 +60,13 @@ const PLAN_BADGE: Record<EmailAutomationPlanType, string> = {
     deliveries: "border-emerald-200 bg-emerald-50 text-emerald-700",
 };
 
-function formatNextRun(iso?: string | null): string {
-    if (!iso) return "—";
-    try {
-        const d = new Date(iso);
-        return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-    } catch {
-        return iso;
-    }
+// Automation timestamps are naive business-local wall-clock strings
+// ("2026-06-25T06:00:00"). Format them as plain text — running them through
+// new Date() would reinterpret them in the browser's timezone and shift the
+// displayed time by the UTC offset.
+function formatWallTime(naive?: string | null): string {
+    if (!naive) return "—";
+    return naive.slice(0, 16).replace("T", " ");
 }
 
 function summarizeSchedule(a: EmailAutomation): string {
@@ -82,12 +81,17 @@ function summarizeSchedule(a: EmailAutomation): string {
             return `${day} at ${time}`;
         }
         case "once":
-            return a.send_at
-                ? `Once at ${new Date(a.send_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
-                : "Once";
+            return a.send_at ? `Once at ${formatWallTime(a.send_at)}` : "Once";
         default:
             return a.frequency;
     }
+}
+
+// Today's date in the browser's local timezone (toISOString would give the
+// UTC date, which is yesterday between 00:00 and 02:00 SAST).
+function localToday(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 // ---------------------------------------------------------------- Page
@@ -184,15 +188,17 @@ function ScheduledTab() {
     const open = (row?: EmailAutomation) => {
         if (row) {
             setEditing(row);
-            const sendAt = row.send_at ? new Date(row.send_at) : null;
             setForm({
                 name: row.name,
                 plan_type: row.plan_type,
                 frequency: row.frequency,
                 send_time: row.send_time ? row.send_time.slice(0, 5) : "06:00",
                 day_of_week: row.day_of_week ?? 0,
-                send_at_date: sendAt ? sendAt.toISOString().slice(0, 10) : "",
-                send_at_time: sendAt ? sendAt.toISOString().slice(11, 16) : "",
+                // send_at is a naive business-local string — slice it directly.
+                // Parsing via new Date() would shift the prefilled time by the
+                // browser's UTC offset on every open→save round trip.
+                send_at_date: row.send_at ? row.send_at.slice(0, 10) : "",
+                send_at_time: row.send_at ? row.send_at.slice(11, 16) : "",
                 recipients: (row.recipients || []).join(", "),
             });
         } else {
@@ -230,7 +236,8 @@ function ScheduledTab() {
                 toast({ variant: "destructive", title: "Pick a date and time for the once-off send." });
                 return;
             }
-            // Local datetime → naive ISO (server treats as UTC; matches existing convention).
+            // Wall-clock as typed — the scheduler runs in business-local time
+            // (SCHEDULER_UTC_OFFSET_MINUTES on the API), so no conversion.
             payload.send_at = `${form.send_at_date}T${form.send_at_time}:00`;
             payload.send_time = null;
             payload.day_of_week = null;
@@ -340,9 +347,9 @@ function ScheduledTab() {
                                         <span className="inline-flex items-center gap-1">
                                             <Clock className="h-3 w-3" /> {summarizeSchedule(row)}
                                         </span>
-                                        <span>Next run: <strong>{formatNextRun(row.next_run_at)}</strong></span>
+                                        <span>Next run: <strong>{formatWallTime(row.next_run_at)}</strong></span>
                                         {row.last_sent_at && (
-                                            <span>Last sent: {formatNextRun(row.last_sent_at)}</span>
+                                            <span>Last sent: {formatWallTime(row.last_sent_at)}</span>
                                         )}
                                         <span>{row.recipients.length} recipient{row.recipients.length === 1 ? "" : "s"}</span>
                                     </div>
@@ -479,7 +486,7 @@ function OnceOffTab() {
     const { toast } = useToast();
     const [planType, setPlanType] = useState<EmailAutomationPlanType>("orders");
     const [recipients, setRecipients] = useState("");
-    const [forDate, setForDate] = useState<string>(new Date().toISOString().slice(0, 10));
+    const [forDate, setForDate] = useState<string>(localToday());
     const [sending, setSending] = useState(false);
     const [lastResult, setLastResult] = useState<string | null>(null);
 

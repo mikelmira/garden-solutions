@@ -14,6 +14,7 @@ from app.schemas.email_automation import (
     OnceOffSendRequest,
     OnceOffSendResponse,
 )
+from app.services.email import business_now
 from app.services.email_automation import EmailAutomationService
 from app.services.plan_emails import send_ad_hoc_email
 from app.core.config import get_settings
@@ -63,16 +64,12 @@ def update_automation(
     db: Session = Depends(get_db),
 ):
     service = EmailAutomationService(db)
+    # exclude_unset so the service can tell "field omitted" apart from
+    # "field explicitly set to null" (needed to clear day_of_week/send_at
+    # when the frequency changes).
     row = service.update(
         automation_id,
-        name=data.name,
-        plan_type=data.plan_type,
-        frequency=data.frequency,
-        send_time=data.send_time,
-        day_of_week=data.day_of_week,
-        send_at=data.send_at,
-        recipients=[str(r) for r in data.recipients] if data.recipients is not None else None,
-        is_active=data.is_active,
+        patch=data.model_dump(exclude_unset=True),
         performed_by=current_user.id,
     )
     return DataResponse(data=EmailAutomationResponse.model_validate(row))
@@ -113,7 +110,7 @@ def send_once_off(
     If RESEND_API_KEY is missing, we still render the email (so the UI confirms
     the content was prepared) but report `sent=False` with a clear note.
     """
-    target_date = data.for_date or date_cls.today()
+    target_date = data.for_date or business_now().date()
     recipients = [str(r) for r in data.recipients]
     api_key_set = bool(get_settings().RESEND_API_KEY)
 
